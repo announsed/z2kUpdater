@@ -94,5 +94,5 @@ jobs:
               --title "Entware: офлайн-установщики для Keenetic" --notes-file out/notes.md --latest=false
           fi
           gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber \
-            out/*-installer.tar.gz out/*.manifest out/*.install.diff out/ALL.manifest
+            out/*-installer.tar.gz out/*-installer.manifest out/*.install.diff out/ALL.manifest
           gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --notes-file out/notes.md
