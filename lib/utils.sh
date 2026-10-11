@@ -106,23 +106,23 @@ _z2k_vps_gh_resolve() {
 # спастись: 1.37.0-6 падает с segfault на ключе -T.
 # Поэтому НАШИ вызовы opkg получают свой `wget`: временный скрипт впереди PATH,
 # который качает curl'ом и обрывает застрявшую загрузку по скорости, а хосты
-# *.entware.net — через прокси узла (tinyproxy :8119, фильтр пропускает
-# entware.net и cloudflareclient.com). Узел не ответил — curl напрямую; curl нет
-# или opkg передал незнакомый ключ — настоящий wget.
+# *.entware.net ведёт через узел ТАК ЖЕ, КАК GITHUB: `--resolve <host>:443:<VPS>`
+# и https — nginx узла пропускает поток по имени (SNI) к настоящему Entware, TLS
+# идёт насквозь, логинов нет. Узел не ответил — curl напрямую по исходному адресу;
+# curl нет или opkg передал незнакомый ключ — настоящий wget.
 #
 # Глобальный opkg.conf не трогаем: свои `opkg update` человек делает как раньше.
-# http_proxy на весь установщик выставлять нельзя: его читает и curl в z2k_fetch,
-# и GitHub упёрся бы в фильтр прокси.
-Z2K_OPKG_PROXY="${Z2K_OPKG_PROXY:-http://z2kwarp:z2kW4rpR3g2026@${Z2K_VPS_GH_IP:-213.176.74.63}:8119}"
+Z2K_OPKG_VPS="${Z2K_OPKG_VPS:-${Z2K_VPS_GH_IP:-213.176.74.63}}"
 
-# Текст временного wget. Адрес прокси вшивается при создании: скрипт
+# Текст временного wget. Адрес узла вшивается при создании: скрипт
 # самодостаточен, его можно получить и без остального utils.sh (панель).
 z2k_opkg_shim() {
     printf '#!/bin/sh\n'
-    printf 'proxy="${Z2K_OPKG_PROXY:-%s}"\n' "$Z2K_OPKG_PROXY"
+    printf 'vps="${Z2K_OPKG_VPS:-%s}"\n' "$Z2K_OPKG_VPS"
     cat <<'SHIM'
 # Временный wget для opkg от z2k (z2k_opkg в lib/utils.sh): качает curl'ом,
-# хосты *.entware.net — через прокси узла z2k, при отказе узла — напрямую.
+# хосты *.entware.net — через узел z2k (сквозной проход по имени, как GitHub),
+# при отказе узла — напрямую.
 real="${Z2K_REAL_WGET:-}"
 fallback() {
     [ -n "$real" ] && [ -x "$real" ] && exec "$real" "$@"
@@ -152,22 +152,24 @@ for a in "$@"; do
 done
 [ -n "$out" ] && [ -n "$url" ] || fallback "$@"
 case "$to" in ''|*[!0-9]*) to=30 ;; esac
-host=${url#*://}; host=${host%%/*}; host=${host##*@}; host=${host%%:*}
-host=$(printf '%s' "$host" | tr 'A-Z' 'a-z')
+rest=${url#*://}; hostport=${rest%%/*}; path=${rest#"$hostport"}
+host=$(printf '%s' "$hostport" | tr 'A-Z' 'a-z')
 # Застрявшую загрузку (блок по объёму) обрываем по скорости, а не по общему
 # таймауту: большой пакет на медленной линии не должен падать.
-get() {
+get() { # $1 — адрес, дальше — доп. ключи curl
+    _u=$1; shift
     if [ -n "$ins" ]; then
-        curl -fsSL -k --connect-timeout "$to" --speed-limit 1024 --speed-time 30 "$@" -o "$out" "$url"
+        curl -fsSL -k --connect-timeout "$to" --speed-limit 1024 --speed-time 30 "$@" -o "$out" "$_u"
     else
-        curl -fsSL --connect-timeout "$to" --speed-limit 1024 --speed-time 30 "$@" -o "$out" "$url"
+        curl -fsSL --connect-timeout "$to" --speed-limit 1024 --speed-time 30 "$@" -o "$out" "$_u"
     fi
 }
+# Через узел — только имя без логина и порта: --resolve привязан к host:443.
 case "$host" in
     entware.net|*.entware.net)
-        [ -n "$proxy" ] && get --proxy "$proxy" && exit 0 ;;
+        [ -n "$vps" ] && get "https://$host$path" --resolve "$host:443:$vps" && exit 0 ;;
 esac
-get
+get "$url"
 SHIM
 }
 

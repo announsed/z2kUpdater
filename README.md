@@ -113,18 +113,20 @@ opkg install coreutils-sort curl grep gzip ipset iptables kmod_ndms xtables-addo
 
 #### Если `opkg update` висит или обрывается
 
-У части провайдеров сервер пакетов Entware (`bin.entware.net`) обрывает загрузку на первых десятках килобайт, и `opkg` висит без конца. Пропустите `opkg` через узел проекта z2k — он пропускает только серверы Entware:
+У части провайдеров сервер пакетов Entware (`bin.entware.net`) обрывает загрузку на первых десятках килобайт, и `opkg` висит без конца. Возьмите пакеты через зеркало на узле проекта z2k — оно отдаёт только `bin.entware.net` и больше ничего:
 
 ```bash
-export http_proxy=http://z2kwarp:z2kW4rpR3g2026@213.176.74.63:8119
+sed -i 's|http://bin.entware.net|http://213.176.74.63/entware|g' /opt/etc/opkg.conf
 opkg update
 opkg install coreutils-sort curl grep gzip ipset iptables kmod_ndms xtables-addons_legacy openssl-util
-unset http_proxy
+sed -i 's|http://213.176.74.63/entware|http://bin.entware.net|g' /opt/etc/opkg.conf
 ```
+
+Последняя строка возвращает основной сервер в настройки `opkg`.
 
 Сам установщик z2k ставит и обновляет пакеты через узел и без этого шага.
 
-Зеркало вместо узла подойдёт, только если у вас стоит полноценный wget (пакет `wget-ssl`): встроенный в Entware busybox wget не умеет https, а по http зеркало ему отказывает.
+Стороннее зеркало вместо узла подойдёт, только если у вас стоит полноценный wget (пакет `wget-ssl`): встроенный в Entware busybox wget не умеет https, а по http зеркало ему отказывает.
 
 ```bash
 sed -i 's|http://bin.entware.net|https://mirrors.bfsu.edu.cn/entware|g' /opt/etc/opkg.conf
