@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "branch": "z2k-enhanced",
-  "seq": 143,
-  "current": "p-86.19",
+  "seq": 144,
+  "current": "p-86.20",
   "install_map": {
   "files/000-zapret2.sh": ["/opt/etc/ndm/netfilter.d/000-zapret2.sh"],
   "files/S99zapret2.new": ["/opt/etc/init.d/S99zapret2"],
@@ -220,7 +220,7 @@
   "lib/install.sh": "44ea7f97950455ef30334a008663a5357eb3f033141795b359629ec4e8de71c7",
   "lib/menu.sh": "49f41c8be10b8ad5441f79dc4490a36d651f0833652dbddf4ae41e7da4d0cc38",
   "lib/strategies.sh": "5c1186493aeba1581e668246e4a23b9e0d5497905015c8dec5b8458683408c2d",
-  "lib/utils.sh": "eebd3bceb95d8203cb9a06878de839150ac79653ec7b5ec894c8f1bf0243872c",
+  "lib/utils.sh": "daa973362684f59fbacbb81cf75789f018486b719f0521703464f9489056913b",
   "lib/wan.sh": "7f66e83516031bf66ea5f185804e0c90442507d7a75c95a7bc27f6b86d639129",
   "lib/webpanel.sh": "7e44a9f94e442d87f67bce091548dc482c921fad49014face9af53e8ed3e9504",
   "mtproxy-client/builds/tg-mtproxy-client-linux-386": "8548cda0ee940e0c8ecb4d00710e7f13e62565a5405d7a34d49b28068b5b8b0c",
@@ -262,7 +262,7 @@
   "webpanel/www/fonts/FiraSans-600-latin.woff2": "f3cc7b2756c566cf8172bfd269d805c4a1eb953f6b6ce8bf2b2ddf49c5422189",
   "webpanel/www/fonts/FiraSans-700-cyrillic.woff2": "42a8013e902099b563e434d3ccb3bed87ff6d6af8d80fe51ff203f2ac487673b",
   "webpanel/www/fonts/FiraSans-700-latin.woff2": "811e73619cc2909792e8fa134c8d1ed714b898310dd4cc218fc29e40a5dc2890",
-  "webpanel/www/index.html": "82fc88391f516de7924d1cbf07a4ada5bccb27de09cd1ab21b7c1e3c200fd8e2",
+  "webpanel/www/index.html": "62c012e6691f0cca05091292929608fc1a81a6dbfba58c1aab383195a64eb80f",
   "webpanel/www/js/chrome.js": "3e2217758cde6d87f4809aaf65c4aafca582b936d9c53b19abb4adac1479fdef",
   "webpanel/www/js/core/api.js": "eaa798b49c02373a1cffcdee447587f9969194323dd5471ac74a07d4af7b235f",
   "webpanel/www/js/core/auth.js": "7afe5b139737783402f45fb654b9383b24d68779aae93a0f5f1847608252ad8c",
@@ -602,6 +602,7 @@
 {"v": "p-86.17", "type": "patch", "ts": "2026-10-09T22:46:11Z", "ref": "p-86.17", "desc": "Новый спонсор проекта — bootnet.", "changed_files": ["webpanel/www/index.html", "lib/menu.sh", "webpanel/www/js/pages/credits.js", "UPDATES.json"], "steps": [], "full_install": false},
 {"v": "r-86.5", "type": "reinstall", "ts": "2026-10-10T12:08:31Z", "ref": "r-86.5", "desc": "Движок обхода обновлён до zapret2 1.0.5.2 с нашим исправлением: большой ClientHello из нескольких частей больше не зависает, если часть сегментов прошла мимо обхода — соединение продолжается с задержкой в доли секунды. Восстановление правил после пересборки сетевых правил Keenetic стало надёжнее: событие, пришедшее во время восстановления, больше не теряется (раньше обход мог молчать до минуты), а сами события пишутся в журнал для диагностики. Планировщик следит, чтобы программное ускорение NAT оставалось выключенным.", "changed_files": ["webpanel/www/index.html", "files/000-zapret2.sh", "files/z2k-diag.sh", "files/z2k-nfqueue-selfheal.sh", "lib/install.sh", "UPDATES.json"], "steps": [], "full_install": true},
 {"v": "p-86.18", "type": "patch", "ts": "2026-10-11T13:47:15Z", "ref": "p-86.18", "desc": "WARP можно включить для всего трафика сети: если не выбрано ни одного устройства и выключены все списки, через WARP идёт весь интернет-трафик локальной сети, а домашняя сеть и роутер остаются доступны напрямую. В диагностике теперь видно, что именно сейчас идёт через WARP.", "changed_files": ["webpanel/www/index.html", "files/z2k-diag.sh", "files/z2k-warp.sh", "webpanel/www/js/pages/warp.js", "UPDATES.json"], "steps": [], "full_install": false},
-{"v": "p-86.19", "type": "patch", "ts": "2026-10-11T15:49:15Z", "ref": "p-86.19", "desc": "Установка и обновление пакетов Entware больше не зависают у провайдеров, которые режут сервер Entware: установщик z2k качает пакеты через узел проекта. Для тех, у кого не устанавливается сам Entware, появились офлайн-установщики — ссылки и инструкция в README.", "changed_files": ["webpanel/www/index.html", "lib/install.sh", "lib/utils.sh", "webpanel/install.sh", "UPDATES.json"], "steps": [], "full_install": false}
+{"v": "p-86.19", "type": "patch", "ts": "2026-10-11T15:49:15Z", "ref": "p-86.19", "desc": "Установка и обновление пакетов Entware больше не зависают у провайдеров, которые режут сервер Entware: установщик z2k качает пакеты через узел проекта. Для тех, у кого не устанавливается сам Entware, появились офлайн-установщики — ссылки и инструкция в README.", "changed_files": ["webpanel/www/index.html", "lib/install.sh", "lib/utils.sh", "webpanel/install.sh", "UPDATES.json"], "steps": [], "full_install": false},
+{"v": "p-86.20", "type": "patch", "ts": "2026-10-11T20:47:18Z", "ref": "p-86.20", "desc": "Пакеты Entware установщик z2k теперь берёт через узел проекта тем же способом, что и сам z2k с GitHub. В README ручной обход для opkg — через зеркало узла, без логинов.", "changed_files": ["webpanel/www/index.html", "lib/utils.sh", "UPDATES.json"], "steps": [], "full_install": false}
   ]
 }
