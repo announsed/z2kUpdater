@@ -137,16 +137,7 @@ opkg update
 
 #### Если Entware не устанавливается
 
-Официальный установщик Entware во время установки сам качает пакеты с того же `bin.entware.net`, поэтому на таких линиях установка обрывается. Для этого случая есть офлайн-установщики: это официальный установщик Entware, в который заранее положены его базовые пакеты и `curl`, — сеть при установке не нужна. Они собираются автоматически раз в неделю, каждый пакет сверяется с официальным индексом Entware, и каждый архив перед публикацией устанавливается без сети в проверочной среде.
-
-1. Скачайте архив для архитектуры своей модели (архитектуру укажет официальная инструкция Keenetic выше):
-   - ARM64 — [aarch64-installer.tar.gz](https://github.com/necronicle/z2k/releases/download/entware-offline/aarch64-installer.tar.gz)
-   - MIPSel — [mipsel-installer.tar.gz](https://github.com/necronicle/z2k/releases/download/entware-offline/mipsel-installer.tar.gz)
-   - MIPS — [mips-installer.tar.gz](https://github.com/necronicle/z2k/releases/download/entware-offline/mips-installer.tar.gz)
-2. Дальше — как в официальной инструкции: положите архив в папку `install` на USB-накопителе и выберите накопитель в настройках компонента OPKG.
-3. После установки `opkg` снова смотрит на `bin.entware.net`; ключи SSH создаются на самом роутере.
-
-Состав пакетов и контрольные суммы — на [странице релиза](https://github.com/necronicle/z2k/releases/tag/entware-offline).
+Официальный установщик Entware во время установки сам качает пакеты с того же `bin.entware.net`, поэтому на таких линиях установка обрывается. Для этого случая есть офлайн-установщики: официальный установщик с пакетами внутри, сеть при установке не нужна. Архивы для всех архитектур, инструкция и контрольные суммы — в репозитории [entware-offline](https://github.com/necronicle/entware-offline).
 
 ### 3) Установка z2k
 
