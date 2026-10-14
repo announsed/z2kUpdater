@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "branch": "z2k-enhanced",
-  "seq": 144,
-  "current": "p-86.20",
+  "seq": 145,
+  "current": "p-86.21",
   "install_map": {
   "files/000-zapret2.sh": ["/opt/etc/ndm/netfilter.d/000-zapret2.sh"],
   "files/S99zapret2.new": ["/opt/etc/init.d/S99zapret2"],
@@ -218,7 +218,7 @@
   "lib/config.sh": "e1203016155fab62a7ee0351663014a1663b0dfd3cd4b5d8c5f9a2cb35813ab3",
   "lib/config_official.sh": "a378b9bdf9df5750c80bb049942ab7aa3660f30d9b26ca8c674c3faa3f7c88e7",
   "lib/install.sh": "44ea7f97950455ef30334a008663a5357eb3f033141795b359629ec4e8de71c7",
-  "lib/menu.sh": "49f41c8be10b8ad5441f79dc4490a36d651f0833652dbddf4ae41e7da4d0cc38",
+  "lib/menu.sh": "cff17bbb6e15021cdd30e6de9aa5dd8ef8e3343a29ab5ded140f1e31250a6162",
   "lib/strategies.sh": "5c1186493aeba1581e668246e4a23b9e0d5497905015c8dec5b8458683408c2d",
   "lib/utils.sh": "daa973362684f59fbacbb81cf75789f018486b719f0521703464f9489056913b",
   "lib/wan.sh": "7f66e83516031bf66ea5f185804e0c90442507d7a75c95a7bc27f6b86d639129",
@@ -262,7 +262,7 @@
   "webpanel/www/fonts/FiraSans-600-latin.woff2": "f3cc7b2756c566cf8172bfd269d805c4a1eb953f6b6ce8bf2b2ddf49c5422189",
   "webpanel/www/fonts/FiraSans-700-cyrillic.woff2": "42a8013e902099b563e434d3ccb3bed87ff6d6af8d80fe51ff203f2ac487673b",
   "webpanel/www/fonts/FiraSans-700-latin.woff2": "811e73619cc2909792e8fa134c8d1ed714b898310dd4cc218fc29e40a5dc2890",
-  "webpanel/www/index.html": "62c012e6691f0cca05091292929608fc1a81a6dbfba58c1aab383195a64eb80f",
+  "webpanel/www/index.html": "2c679a7ad0cb1d1c2051a1c0f9403eefda522a4909d9181c4da89c042f42a86e",
   "webpanel/www/js/chrome.js": "3e2217758cde6d87f4809aaf65c4aafca582b936d9c53b19abb4adac1479fdef",
   "webpanel/www/js/core/api.js": "eaa798b49c02373a1cffcdee447587f9969194323dd5471ac74a07d4af7b235f",
   "webpanel/www/js/core/auth.js": "7afe5b139737783402f45fb654b9383b24d68779aae93a0f5f1847608252ad8c",
@@ -273,7 +273,7 @@
   "webpanel/www/js/core/toast.js": "21b8373e69aeff39e6fa2ac5f2427899786506a50ba1937da60d9ec16c6e3bf0",
   "webpanel/www/js/core/whitelist.js": "f05e2250c94649848185f6b12e45d5fb382b3ca106a773550db1675d0e830318",
   "webpanel/www/js/job.js": "0f08852ec8202fb451a51f1d9a5745835a445e892905d4840fc4b1dbc4fab20b",
-  "webpanel/www/js/pages/credits.js": "66d4121a053f34d62ab3682e7096af8df0d970225f8a3284cd7a221519538e4d",
+  "webpanel/www/js/pages/credits.js": "0725c2e7d1f7b400dc7a788138ab9fe9b03b8477c0a8c1a0474ff7e44677623f",
   "webpanel/www/js/pages/dashboard.js": "a0383fa9eb839d8fe4136d539bd2c52149e241b638a38bee468965d1b6ac8af0",
   "webpanel/www/js/pages/diag.js": "435921bff2dd8a228222147a33dd9fe1308209a139adbccb00056dfc4869179d",
   "webpanel/www/js/pages/exclude.js": "65e3a12bcb4afb84cd8b837bb15ec7520727417d0f6a9562e89f65d939cff886",
@@ -603,6 +603,7 @@
 {"v": "r-86.5", "type": "reinstall", "ts": "2026-10-10T12:08:31Z", "ref": "r-86.5", "desc": "Движок обхода обновлён до zapret2 1.0.5.2 с нашим исправлением: большой ClientHello из нескольких частей больше не зависает, если часть сегментов прошла мимо обхода — соединение продолжается с задержкой в доли секунды. Восстановление правил после пересборки сетевых правил Keenetic стало надёжнее: событие, пришедшее во время восстановления, больше не теряется (раньше обход мог молчать до минуты), а сами события пишутся в журнал для диагностики. Планировщик следит, чтобы программное ускорение NAT оставалось выключенным.", "changed_files": ["webpanel/www/index.html", "files/000-zapret2.sh", "files/z2k-diag.sh", "files/z2k-nfqueue-selfheal.sh", "lib/install.sh", "UPDATES.json"], "steps": [], "full_install": true},
 {"v": "p-86.18", "type": "patch", "ts": "2026-10-11T13:47:15Z", "ref": "p-86.18", "desc": "WARP можно включить для всего трафика сети: если не выбрано ни одного устройства и выключены все списки, через WARP идёт весь интернет-трафик локальной сети, а домашняя сеть и роутер остаются доступны напрямую. В диагностике теперь видно, что именно сейчас идёт через WARP.", "changed_files": ["webpanel/www/index.html", "files/z2k-diag.sh", "files/z2k-warp.sh", "webpanel/www/js/pages/warp.js", "UPDATES.json"], "steps": [], "full_install": false},
 {"v": "p-86.19", "type": "patch", "ts": "2026-10-11T15:49:15Z", "ref": "p-86.19", "desc": "Установка и обновление пакетов Entware больше не зависают у провайдеров, которые режут сервер Entware: установщик z2k качает пакеты через узел проекта. Для тех, у кого не устанавливается сам Entware, появились офлайн-установщики — ссылки и инструкция в README.", "changed_files": ["webpanel/www/index.html", "lib/install.sh", "lib/utils.sh", "webpanel/install.sh", "UPDATES.json"], "steps": [], "full_install": false},
-{"v": "p-86.20", "type": "patch", "ts": "2026-10-11T20:47:18Z", "ref": "p-86.20", "desc": "Пакеты Entware установщик z2k теперь берёт через узел проекта тем же способом, что и сам z2k с GitHub. В README ручной обход для opkg — через зеркало узла, без логинов.", "changed_files": ["webpanel/www/index.html", "lib/utils.sh", "UPDATES.json"], "steps": [], "full_install": false}
+{"v": "p-86.20", "type": "patch", "ts": "2026-10-11T20:47:18Z", "ref": "p-86.20", "desc": "Пакеты Entware установщик z2k теперь берёт через узел проекта тем же способом, что и сам z2k с GitHub. В README ручной обход для opkg — через зеркало узла, без логинов.", "changed_files": ["webpanel/www/index.html", "lib/utils.sh", "UPDATES.json"], "steps": [], "full_install": false},
+{"v": "p-86.21", "type": "patch", "ts": "2026-10-14T17:44:59Z", "ref": "p-86.21", "desc": "Новые спонсоры проекта — ewgen911 и cmfifty.", "changed_files": ["webpanel/www/index.html", "lib/menu.sh", "webpanel/www/js/pages/credits.js", "UPDATES.json"], "steps": [], "full_install": false}
   ]
 }
