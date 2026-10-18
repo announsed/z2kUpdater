@@ -18,6 +18,19 @@ PIDFILE="${PIDFILE:-/var/run/z2k-warpd.pid}"
 # Go async-preempt роняет процесс на MIPS (известный краш) — выключаем.
 case "$(uname -m)" in mips*) export GODEBUG=asyncpreemptoff=1 ;; esac
 
+# Корни TLS для API Cloudflare — те же, что ставит z2k-warp.sh (там подробно,
+# почему): движок поднимают и мимо него — при загрузке Entware, из selfheal,
+# из хука NDM. Без своих корней прошивка без ISRG Root X2 не проверяет
+# сертификат api.cloudflareclient.com. SSL_CERT_FILE заменяет системный файл,
+# но не каталоги — их перечисляем явно, доверия становится только больше.
+_roots="${Z2K_ROOTS_PEM:-${ZAPRET2_DIR:-/opt/zapret2}/etc/z2k-roots.pem}"
+[ -f "$_roots" ] && export SSL_CERT_FILE="$_roots"
+_dirs=""
+for _d in /etc/ssl/certs /opt/etc/ssl/certs /etc/pki/tls/certs; do
+    [ -d "$_d" ] && _dirs="${_dirs:+$_dirs:}$_d"
+done
+[ -n "$_dirs" ] && export SSL_CERT_DIR="$_dirs"
+
 # VPS-релей для API Cloudflare, если напрямую заблокирован: тот же, что у
 # регистрации в z2k-warp.sh (переопределяется Z2K_WARP_VPS_PROXY в конфиге).
 _cfg="${ZAPRET2_DIR:-/opt/zapret2}/config"

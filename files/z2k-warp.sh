@@ -78,6 +78,34 @@ WARP_LEGACY_DIR="${WARP_LEGACY_DIR:-/opt/etc/z2k-warp}"
 [ -f "$CONFIG_FILE" ] && _warp_cfg_proxy=$(grep -m1 '^Z2K_WARP_VPS_PROXY=' "$CONFIG_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"')
 WARP_VPS_PROXY="${WARP_VPS_PROXY:-${_warp_cfg_proxy:-http://z2kwarp:z2kW4rpR3g2026@213.176.74.63:8119}}"
 
+# КОРНИ TLS ДЛЯ API CLOUDFLARE. Движок — Go, а Go проверяет сертификат по
+# СИСТЕМНОМУ хранилищу: на Keenetic это то, что положила прошивка, плюс то, что
+# оставил opkg. Сертификат api.cloudflareclient.com выпущен Let's Encrypt по
+# цепочке YE1 → Root YE → ISRG Root X2, и на прошивках без X2 регистрация
+# падала навсегда, напрямую и через релей одинаково (релей только пробрасывает
+# соединение, TLS идёт до Cloudflare):
+#     tls: failed to verify certificate: x509: certificate signed by unknown authority
+# Диагностика 2026-10-18: двое суток, ни одной успешной регистрации. Корни мы
+# уже возим сами (etc/z2k-roots.pem, ставится каждой установке ради туннеля
+# Телеграма) — их просто не видел движок WARP.
+#
+# SSL_CERT_FILE в Go ЗАМЕНЯЕТ список системных файлов, но не каталогов; поэтому
+# каталоги перечисляем явно — прошивки и Entware — и доверия становится только
+# больше. Каждая переменная ставится, лишь если путь существует: пустой
+# SSL_CERT_FILE обнулил бы пул там, где сейчас всё работает. Экспорт здесь
+# покрывает всё, что зовёт движок через этот скрипт: регистрацию, лицензию и
+# подъём демона через init (он ставит то же самое и сам — его зовут и мимо нас).
+z2k_warp_trust_roots() {
+    local _roots="${Z2K_ROOTS_PEM:-$ZAPRET2_DIR/etc/z2k-roots.pem}" _d _dirs=""
+    [ -f "$_roots" ] && export SSL_CERT_FILE="$_roots"
+    for _d in /etc/ssl/certs /opt/etc/ssl/certs /etc/pki/tls/certs; do
+        [ -d "$_d" ] && _dirs="${_dirs:+$_dirs:}$_d"
+    done
+    [ -n "$_dirs" ] && export SSL_CERT_DIR="$_dirs"
+    return 0
+}
+z2k_warp_trust_roots
+
 _wlog() { echo "[z2k-warp] $*" >&2; }
 warp_flag() { grep -m1 '^GAME_WARP_ENABLED=' "$CONFIG_FILE" 2>/dev/null | cut -d= -f2 | tr -d '" '; }
 warp_set_flag() {
