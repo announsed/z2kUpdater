@@ -745,6 +745,31 @@ warp_status_reason() {
     esac
 }
 
+# Почему не прошла ПОСЛЕДНЯЯ регистрация устройства — по журналу движка.
+# Пусто — в журнале нет ни одной неудачи (регистрацию ещё не пробовали).
+#
+# Зачем отдельно от warp_status_reason. Без ключа устройства движок не стартует
+# и status.json не пишет вовсе, поэтому код причины оттуда не прочитать — а
+# ровно здесь человек и застревает. Поле 2026-10-18: двое суток регистрация
+# падала на проверке сертификата Cloudflare, сводка писала «явных проблем не
+# найдено» (WARP так и не включился, значит ветка «WARP включён» молчала).
+#
+# Три причины различаются по-разному лечатся: сертификат — это корни на роутере,
+# таймаут — блокировка на линии, остальное печатаем как есть.
+warp_register_reason() {
+    local line
+    line=$(grep 'register_blocked' /tmp/z2k-warp/warpd.log 2>/dev/null | tail -1)
+    [ -n "$line" ] || return 0
+    case "$line" in
+        *x509*|*"unknown authority"*|*"failed to verify certificate"*)
+            echo "роутер не может проверить сертификат Cloudflare — в его хранилище нет нужного корня" ;;
+        *timeout*|*"connection reset"*|*"connection refused"*|*"no route"*)
+            echo "API Cloudflare не отвечает — похоже на блокировку на линии" ;;
+        *)
+            echo "$line" | sed 's/.*register_blocked *//' | cut -c1-160 ;;
+    esac
+}
+
 # Блокировка по объёму соединения: что проба намерила и доехало ли это до
 # конфига.
 #
@@ -819,6 +844,12 @@ print_tcp16() {
     fi
 }
 
+# Число записей в каталоге (0, если его нет). Глоб, а не `ls | grep -c`.
+_diag_dir_entries() {
+    set -- "$1"/*
+    [ -e "$1" ] && echo "$#" || echo 0
+}
+
 print_warp() {
     printf '\n=== warp ===\n'
     local on bin=/opt/sbin/z2k-warpd st=/tmp/z2k-warp/status.json dev=/opt/etc/z2k-warp/device.json
@@ -871,7 +902,16 @@ print_warp() {
             "$(sed -n 's/.*"iface": *"\([^"]*\)".*/\1/p' "$dev" | head -1)" \
             "$(sed -n 's/.*"client_id": *"\([^"]*\)".*/\1/p' "$dev" | head -1)"
     else
-        printf 'device            : not registered\n'
+        local _reg_why
+        _reg_why=$(warp_register_reason)
+        printf 'device            : not registered%s\n' "${_reg_why:+ — $_reg_why}"
+        # Корни, которые видит движок: файл наш, каталоги прошивки и Entware.
+        # Без этой строки «не проверяется сертификат» не отличить от «корней
+        # нет нигде» — а лечится по-разному.
+        printf 'tls roots         : z2k=%s firmware=%s entware=%s\n' \
+            "$([ -f "${ZAPRET2_DIR}/etc/z2k-roots.pem" ] && echo yes || echo no)" \
+            "$(_diag_dir_entries /etc/ssl/certs)" \
+            "$(_diag_dir_entries /opt/etc/ssl/certs)"
     fi
     if [ -f "$st" ]; then
         printf 'status            : %s\n' "$(cat "$st")"
@@ -1392,7 +1432,8 @@ print_health() {
             # движок падает на старте всегда, и обещать, что selfheal поднимет
             # его «в течение минуты», было прямой неправдой — он и поднимал,
             # каждые 25 с, сутки подряд. Причина одна и лечится регистрацией.
-            _add "WARP включён, но устройство не зарегистрировано у Cloudflare — движок падает на старте; selfheal повторяет регистрацию раз в 10 минут, ускорить можно кнопкой «Установить WARP» в панели"
+            _warp_why=$(warp_register_reason)
+            _add "WARP включён, но устройство не зарегистрировано у Cloudflare${_warp_why:+ ($_warp_why)} — движок падает на старте; selfheal повторяет регистрацию раз в 10 минут, ускорить можно кнопкой «Установить WARP» в панели"
         elif [ ! -f /tmp/z2k-warp/status.json ]; then
             _add "WARP включён, но движок не запущен (нет status.json) — selfheal поднимет его в течение минуты"
         elif ! grep -q '"ready":true' /tmp/z2k-warp/status.json 2>/dev/null; then
@@ -1415,6 +1456,16 @@ print_health() {
                 && ! awk '{ sub(/^[ \t]+/, ""); if ($0!="" && $0!~/^#/) found=1 } END { exit !found }' "${ZAPRET2_DIR}/lists/warp/devices.txt" 2>/dev/null; then
                 _add "WARP поднят, но ни один список адресов не выбран и устройства не выбраны — в туннель не заворачивается ничего (панель → WARP → списки игр)"
             fi
+        fi
+    elif [ -x /opt/sbin/z2k-warpd ] && [ ! -s /opt/etc/z2k-warp/device.json ]; then
+        # WARP ВЫКЛЮЧЕН — но потому, что не смог включиться. Движок стоит, ключа
+        # нет: это ровно «Установить» прошло наполовину, регистрация отказала.
+        # Включение без ключа сорвётся тем же отказом, а ветка выше молчит,
+        # потому что флаг так и не встал. Говорим только при записанной неудаче:
+        # движок без попытки регистрации — не проблема, а незаконченная установка.
+        _warp_why=$(warp_register_reason)
+        if [ -n "$_warp_why" ]; then
+            _add "WARP не включится: устройство не зарегистрировано у Cloudflare ($_warp_why) — после устранения нажмите «Установить WARP» в панели"
         fi
     fi
 

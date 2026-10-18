@@ -79,10 +79,41 @@ fi
 # Порядок ветвей: без ключа status.json тоже отсутствует, поэтому проверка
 # ключа обязана стоять РАНЬШЕ — иначе до неё не доходит никогда.
 _dev_ln=$(grep -n 'device.json' "$DIAG" | grep -c .)
-_ord=$(awk '/! -s \/opt\/etc\/z2k-warp\/device.json/ { d = NR }
+# Первое совпадение — ветка «WARP включён»; ниже есть вторая проверка ключа,
+# для выключенного WARP, и она к порядку этой ветки отношения не имеет.
+_ord=$(awk '/! -s \/opt\/etc\/z2k-warp\/device.json/ && !d { d = NR }
             /нет status.json/                            { s = NR }
             END { print (d > 0 && d < s) ? "ok" : "bad" }' "$DIAG")
 assert_eq "проверка ключа стоит раньше проверки status.json" "ok" "$_ord"
+
+# --- Причина отказа регистрации названа -------------------------------------
+# Поле 2026-10-18: регистрация двое суток падала на проверке сертификата
+# Cloudflare, а сводка писала «явных проблем не найдено»: WARP так и не
+# включился, и ветка «WARP включён» молчала. Причину берём из журнала движка —
+# без ключа status.json не пишется вовсе.
+reg_reason_for() {
+    printf '%s\n' "$1" > "$SB/warpd.log"
+    sed -n '/^warp_register_reason() {/,/^}/p' "$DIAG" \
+        | sed "s#/tmp/z2k-warp/warpd.log#$SB/warpd.log#" > "$SB/rfn.sh"
+    sh -c ". '$SB/rfn.sh'; warp_register_reason"
+}
+assert_eq "x509 — названа проблема с корнями" \
+    "роутер не может проверить сертификат Cloudflare — в его хранилище нет нужного корня" \
+    "$(reg_reason_for '[z2k-warp] register_blocked Post "https://api.cloudflareclient.com/v0a2158/reg": tls: failed to verify certificate: x509: certificate signed by unknown authority')"
+assert_eq "таймаут — названа блокировка на линии" \
+    "API Cloudflare не отвечает — похоже на блокировку на линии" \
+    "$(reg_reason_for '[z2k-warp] напрямую не вышло (register_blocked Post "https://api.cloudflareclient.com/v0a2158/reg": net/http: TLS handshake timeout) — пробую через релей...')"
+assert_eq "незнакомая ошибка печатается как есть" \
+    'Post "x": 403 Forbidden' "$(reg_reason_for '[z2k-warp] register_blocked Post "x": 403 Forbidden')"
+assert_eq "нет неудач в журнале — пусто" "" "$(reg_reason_for '2026-10-18 13:40:34 z2k-warpd dev starting')"
+
+# Выключенный WARP с движком и без ключа — это «Установить» прошло наполовину.
+# Сводка обязана сказать об этом, а не молчать из-за флага.
+if grep -q 'WARP не включится: устройство не зарегистрировано' "$DIAG"; then
+    ok "выключенный WARP без ключа — своя строка в сводке"
+else
+    no "выключенный WARP без ключа — своя строка в сводке" "есть" "нет"
+fi
 
 printf '\nPASSED: %d\nFAILED: %d\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
