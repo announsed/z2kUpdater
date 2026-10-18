@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "branch": "z2k-enhanced",
-  "seq": 146,
-  "current": "p-86.22",
+  "seq": 147,
+  "current": "p-86.23",
   "install_map": {
   "files/000-zapret2.sh": ["/opt/etc/ndm/netfilter.d/000-zapret2.sh"],
   "files/S99zapret2.new": ["/opt/etc/init.d/S99zapret2"],
@@ -140,7 +140,7 @@
   "files_sha256": {
   "files/000-zapret2.sh": "e716a5670e8f740304c027e63971214778493ee185263ed67bad438408e070e4",
   "files/S99zapret2.new": "94532d72a242c75e53f4274558294b0caeda2188b3dbbc65ec480bc78b5a15b0",
-  "files/etc/z2k-roots.pem": "a6cf5a695274d4f36b401cc62183895af11e68b02417638a070465c77f4caf00",
+  "files/etc/z2k-roots.pem": "73e33da886473f1cf2a347fc5be8688540861abd60ac6caa0da1b84242bcdd76",
   "files/etc/z2k-update-pub.pem": "1041720fa0dff53e2babbf547a705c2f43c30bca2c6ca2ddf7144cfe3b470a01",
   "files/fake/quic_1.bin": "f4589c57749f956bb30538197a521d7005f8b0a8723b4707e72405e51ddac50a",
   "files/fake/quic_4.bin": "0e53683f2408bab1f52bc3db10c11b3a2bf238f68db64f4d0ea8aff37e07a61d",
@@ -160,7 +160,7 @@
   "files/fake/tls_clienthello_vk_com.bin": "d6d63c53bc0e1d97e913a43fc4db34f6558bb807228bf6100e3b6863f0720404",
   "files/fake/tls_clienthello_www_google_com.bin": "936c2bee4cfb80aa3c426b2dcbcc834b3fbcd1adb17172959dc569c73a14275c",
   "files/fake/tls_clienthello_www_onetrust_com.bin": "4ee0870abe0a0128600b0095189987ba1d210dae8bf963bc725aff49cf922624",
-  "files/init.d/S51z2k-warp": "d9d4db0da5c134abd356a22125d7a6ad40e0d19156325ca1ab6f5cc2573f2c08",
+  "files/init.d/S51z2k-warp": "94987003fb7b8a8013d27809642231111b2a44d60e47f4972d15e39b06b3fa0e",
   "files/init.d/S96z2k-rt-proxy": "428ec9db9627c1322722b42ed38646a34c05a15849ea153326dad152c777e347",
   "files/init.d/S97z2k-http-tunnel": "0b0a69b2b3670187620d5959427f77a5c582c1afdfe8b038c35b8bd72802a007",
   "files/init.d/S98tg-tunnel": "8364de59455c1f4cab5b05d0c11c46ab21903db37eebebbfa2768f86f86219ba",
@@ -200,7 +200,7 @@
   "files/z2k-auto-update.sh": "d10d23baa1bc9dd7cbe33c410ddd82b496a2fedcb0e4996df1c338a41c4290e6",
   "files/z2k-blocked-monitor.sh": "441c5054e002c17aa7223a8694fa943a62579643a03d99b0870a94060e358a2f",
   "files/z2k-config-validator.sh": "d080e119c894c796323f90d2fcdb1134038f144dc7c73d2e5fec8d4e7539c1a7",
-  "files/z2k-diag.sh": "484be2b1cbb740410ed311f8e57a8afeb859671991c4d6ba7cef580e89678ee7",
+  "files/z2k-diag.sh": "acdf0d64a9c28460ac4da9c9971c09a5ea022f6a8a0bda3d354ecdb1ab6c61d4",
   "files/z2k-dns-check.sh": "8248396c3289e4ae315d73aed7512ba8cb3660fe8bad04355753010a9b3722a4",
   "files/z2k-fix-tg-watchdog.sh": "95a063051c86b11fe96aa5b39349306500a54b1b25601b38184046cfedcd161e",
   "files/z2k-geosite.sh": "754393c2441f56406b6c93a1471bba2f62302d3898a15439d8f9a18f7b503e92",
@@ -213,7 +213,7 @@
   "files/z2k-tg-watchdog.sh": "d9b0494007a9f346ceb39dcae14d65a47f5e72247979b996e1dc2b61e84b59fa",
   "files/z2k-update-lists.sh": "e7f8c83ab5e8de256d79eb00e54b103d63d5ba3020d8d00bef8ccd2286738850",
   "files/z2k-warp-list-filter.awk": "97db4a85663e4b3a7c4943e495276f521a9ba961d8419df1059efdcceea655c5",
-  "files/z2k-warp.sh": "28dbca6d1b405648a9107fbad9b3ddf8c1f6b6cc3e2b84e61605146553618d1d",
+  "files/z2k-warp.sh": "f20ec858dfe528e19f28671ef5a0c1a19da207d22f61d79d8e781b181ed814f1",
   "lib/auto_update.sh": "f3207a68c08cd7725177fb2f7b3ae36464b265c552d11561f3d03016b180d6c2",
   "lib/config.sh": "e1203016155fab62a7ee0351663014a1663b0dfd3cd4b5d8c5f9a2cb35813ab3",
   "lib/config_official.sh": "a378b9bdf9df5750c80bb049942ab7aa3660f30d9b26ca8c674c3faa3f7c88e7",
@@ -262,7 +262,7 @@
   "webpanel/www/fonts/FiraSans-600-latin.woff2": "f3cc7b2756c566cf8172bfd269d805c4a1eb953f6b6ce8bf2b2ddf49c5422189",
   "webpanel/www/fonts/FiraSans-700-cyrillic.woff2": "42a8013e902099b563e434d3ccb3bed87ff6d6af8d80fe51ff203f2ac487673b",
   "webpanel/www/fonts/FiraSans-700-latin.woff2": "811e73619cc2909792e8fa134c8d1ed714b898310dd4cc218fc29e40a5dc2890",
-  "webpanel/www/index.html": "6c30896123f19626baa308c02e33b26879d0dc8baaeeed828cce8cc7a7df4e20",
+  "webpanel/www/index.html": "76750d99fd3e1cc23810cd1c03152fba588515baebd746cb4280ddecdeeec400",
   "webpanel/www/js/chrome.js": "3e2217758cde6d87f4809aaf65c4aafca582b936d9c53b19abb4adac1479fdef",
   "webpanel/www/js/core/api.js": "eaa798b49c02373a1cffcdee447587f9969194323dd5471ac74a07d4af7b235f",
   "webpanel/www/js/core/auth.js": "7afe5b139737783402f45fb654b9383b24d68779aae93a0f5f1847608252ad8c",
@@ -605,6 +605,7 @@
 {"v": "p-86.19", "type": "patch", "ts": "2026-10-11T15:49:15Z", "ref": "p-86.19", "desc": "Установка и обновление пакетов Entware больше не зависают у провайдеров, которые режут сервер Entware: установщик z2k качает пакеты через узел проекта. Для тех, у кого не устанавливается сам Entware, появились офлайн-установщики — ссылки и инструкция в README.", "changed_files": ["webpanel/www/index.html", "lib/install.sh", "lib/utils.sh", "webpanel/install.sh", "UPDATES.json"], "steps": [], "full_install": false},
 {"v": "p-86.20", "type": "patch", "ts": "2026-10-11T20:47:18Z", "ref": "p-86.20", "desc": "Пакеты Entware установщик z2k теперь берёт через узел проекта тем же способом, что и сам z2k с GitHub. В README ручной обход для opkg — через зеркало узла, без логинов.", "changed_files": ["webpanel/www/index.html", "lib/utils.sh", "UPDATES.json"], "steps": [], "full_install": false},
 {"v": "p-86.21", "type": "patch", "ts": "2026-10-14T17:44:59Z", "ref": "p-86.21", "desc": "Новые спонсоры проекта — ewgen911 и cmfifty.", "changed_files": ["webpanel/www/index.html", "lib/menu.sh", "webpanel/www/js/pages/credits.js", "UPDATES.json"], "steps": [], "full_install": false},
-{"v": "p-86.22", "type": "patch", "ts": "2026-10-16T11:33:01Z", "ref": "p-86.22", "desc": "Новый спонсор проекта — Ret80.", "changed_files": ["webpanel/www/index.html", "lib/menu.sh", "webpanel/www/js/pages/credits.js", "UPDATES.json"], "steps": [], "full_install": false}
+{"v": "p-86.22", "type": "patch", "ts": "2026-10-16T11:33:01Z", "ref": "p-86.22", "desc": "Новый спонсор проекта — Ret80.", "changed_files": ["webpanel/www/index.html", "lib/menu.sh", "webpanel/www/js/pages/credits.js", "UPDATES.json"], "steps": [], "full_install": false},
+{"v": "p-86.23", "type": "patch", "ts": "2026-10-18T17:47:16Z", "ref": "p-86.23", "desc": "Исправлено включение WARP на роутерах, где регистрация у Cloudflare не проходила из-за ошибки проверки сертификата. Если WARP не удаётся зарегистрировать, диагностика теперь прямо называет причину.", "changed_files": ["webpanel/www/index.html", "files/etc/z2k-roots.pem", "files/init.d/S51z2k-warp", "files/z2k-diag.sh", "files/z2k-warp.sh", "UPDATES.json"], "steps": [], "full_install": false}
   ]
 }
