@@ -16,14 +16,50 @@ type Change struct {
 	Delete       bool
 }
 type Cache struct {
-	rules   Rules
-	pairs   map[pair]map[string]time.Time
-	skipped uint64
+	rules       Rules
+	pairs       map[pair]map[string]time.Time
+	clients     map[netip.Addr]int
+	pairedCount int
+	skipped     uint64
 }
 
-func NewCache(r Rules) *Cache    { return &Cache{rules: r, pairs: make(map[pair]map[string]time.Time)} }
+func NewCache(r Rules) *Cache {
+	return &Cache{
+		rules:   r,
+		pairs:   make(map[pair]map[string]time.Time),
+		clients: make(map[netip.Addr]int),
+	}
+}
 func (c *Cache) Len() int        { return len(c.pairs) }
 func (c *Cache) Skipped() uint64 { return c.skipped }
+
+func (c *Cache) syncClients() {
+	if c.pairedCount == len(c.pairs) {
+		return
+	}
+	clear(c.clients)
+	for k := range c.pairs {
+		c.clients[k.client]++
+	}
+	c.pairedCount = len(c.pairs)
+}
+
+func (c *Cache) decClient(client netip.Addr) {
+	if c.clients[client] <= 1 {
+		delete(c.clients, client)
+	} else {
+		c.clients[client]--
+	}
+	c.pairedCount--
+}
+
+func (c *Cache) deletePair(k pair) {
+	c.syncClients()
+	if _, ok := c.pairs[k]; ok {
+		delete(c.pairs, k)
+		c.decClient(k.client)
+	}
+}
 
 func (c *Cache) Observe(client netip.Addr, name string, answers []Answer, now time.Time) []Change {
 	if _, err := clientSet(client); err != nil || !c.rules.Match(name) {
@@ -44,7 +80,10 @@ func (c *Cache) Observe(client netip.Addr, name string, answers []Answer, now ti
 				c.skipped++
 				continue
 			}
+			c.syncClients()
 			c.pairs[k] = make(map[string]time.Time)
+			c.clients[client]++
+			c.pairedCount++
 		}
 		before := latest(c.pairs[k])
 		ttl := min(a.TTL, time.Hour)
@@ -58,19 +97,12 @@ func (c *Cache) Observe(client netip.Addr, name string, answers []Answer, now ti
 }
 
 func (c *Cache) hasClient(client netip.Addr) bool {
-	for k := range c.pairs {
-		if k.client == client {
-			return true
-		}
-	}
-	return false
+	c.syncClients()
+	return c.clients[client] > 0
 }
 func (c *Cache) clientCount() int {
-	seen := make(map[netip.Addr]struct{})
-	for k := range c.pairs {
-		seen[k.client] = struct{}{}
-	}
-	return len(seen)
+	c.syncClients()
+	return len(c.clients)
 }
 
 func (c *Cache) justificationCount() int {
@@ -98,6 +130,7 @@ func (c *Cache) ReplaceRules(r Rules, now time.Time) []Change {
 func (c *Cache) Expire(now time.Time) []Change { return c.clean(now) }
 
 func (c *Cache) clean(now time.Time) []Change {
+	c.syncClients()
 	var changes []Change
 	for k, names := range c.pairs {
 		before := latest(names)
@@ -108,6 +141,7 @@ func (c *Cache) clean(now time.Time) []Change {
 		}
 		if len(names) == 0 {
 			delete(c.pairs, k)
+			c.decClient(k.client)
 			changes = append(changes, Change{Client: k.client, Dest: k.dest, Delete: true})
 		} else if after := latest(names); !after.Equal(before) {
 			changes = append(changes, Change{Client: k.client, Dest: k.dest, Expiry: after})
