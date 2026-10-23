@@ -4095,6 +4095,10 @@ step_finalize() {
     fi
     rm -f "${ZAPRET2_DIR}/z2k-discord-voice-pin.sh" \
           "${ZAPRET2_DIR}/lists/flowseal_discord_voice_hosts.txt" 2>/dev/null || true
+    # Снимок onetrust снят 23.10.2026 (Flowseal 1.10.4 заменил его на sferum,
+    # у нас он ни одним плечом больше не упоминается). Файл на роутере
+    # безвреден, но и возить мёртвый груз незачем.
+    rm -f "${ZAPRET2_DIR}/files/fake/tls_clienthello_www_onetrust_com.bin" 2>/dev/null || true
 
     # WhatsApp + Ticketmaster relay (Keenetic static DNS → EU-egress VPS).
     # Their real backends are unreachable on RU ISPs: WhatsApp's servers are

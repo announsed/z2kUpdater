@@ -1140,7 +1140,9 @@ download_fake_blobs() {
 tls_clienthello_max_ru.bin
 tls_clienthello_14.bin
 tls_clienthello_www_google_com.bin
-tls_clienthello_www_onetrust_com.bin
+tls_clienthello_www_sferum_ru.bin
+tls_clienthello_sochi_park.bin
+stun2.bin
 tls_clienthello_activated.bin
 tls_clienthello_4pda_to.bin
 tls_clienthello_vk_com.bin

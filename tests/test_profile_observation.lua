@@ -114,7 +114,8 @@ H.test('a success on another domain cannot reset this domain failures',function(
     H.eq(2,h.failure_counter)
 end)
 H.test('previously unprotected TCP fakes carry an invalid checksum',function()
-    for key,num in pairs({rkn_tcp='38',yt_tcp='18',gv_tcp='18'}) do
+    -- Номера после перенумерации 23.10.2026 (rkn 38 -> 40, yt/gv 18 -> 26).
+    for key,num in pairs({rkn_tcp='40',yt_tcp='26',gv_tcp='26'}) do
         local checked=false
         for _,ins in ipairs(all[key]) do
             if ins.func=='fake' and ins.arg.strategy==num then
@@ -124,14 +125,15 @@ H.test('previously unprotected TCP fakes carry an invalid checksum',function()
         assert(checked,'missing fake '..key)
     end
 end)
-H.test('GV slot 11 is distinct while the existing 1..22 numbering is retained',function()
+H.test('GV slot 11 is distinct while the contiguous 1..30 numbering is retained',function()
     local ids,slot6,slot11={}
     for _,ins in ipairs(all.gv_tcp) do
         if ins.arg.strategy then ids[tonumber(ins.arg.strategy)]=true end
         if ins.func=='multisplit' and ins.arg.strategy=='6' then slot6=ins.arg end
         if ins.func=='multisplit' and ins.arg.strategy=='11' then slot11=ins.arg end
     end
-    for i=1,22 do H.eq(true,ids[i]) end
+    for i=1,30 do H.eq(true,ids[i]) end
+    H.eq(nil,ids[31])
     H.eq('1',slot6.seqovl); H.eq(nil,slot11.seqovl)
     H.eq(slot6.pos,slot11.pos)
 end)

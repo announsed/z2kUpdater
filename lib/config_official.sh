@@ -1553,11 +1553,16 @@ generate_nfqws2_opt_from_strategies() {
     # googlevideo.com (confirmed by hostlist.c:262-281). Circular pins per-SLD
     # thanks to nld=2, so youtube.com and googlevideo.com maintain independent
     # strategy picks even though they share the key=google_tls state.
-    # GV strategies renumbered 23..44 to avoid collision with YT's 1..22.
+    # GV strategies are renumbered past YT's last slot so the two sets do not
+    # collide. The offset is READ from the YT pool, not hardcoded: it was a
+    # literal 22 until 23.10.2026, and the pools grew to 30 that day — a stale
+    # literal would have overlapped YT 23..30 with GV 1..8 in the shared key.
     # Pre-Phase-3 else path keeps the legacy two-profile layout for rollback.
     if [ "$Z2K_REFACTOR_PHASE3" = "1" ]; then
-        local youtube_gv_rebased
-        youtube_gv_rebased=$(rebase_strategy_ids "$youtube_gv_tcp" 22)
+        local youtube_gv_rebased yt_last_slot
+        yt_last_slot=$(printf '%s' "$youtube_tcp" | grep -o ':strategy=[0-9]*' | sed 's/.*=//' | sort -n | tail -1)
+        [ -n "$yt_last_slot" ] || yt_last_slot=30
+        youtube_gv_rebased=$(rebase_strategy_ids "$youtube_gv_tcp" "$yt_last_slot")
         # Extract ONLY non-circular --lua-desync=* tokens from GV.
         # Global options (--filter-tcp, --filter-l7, --payload, --out-range,
         # --in-range) are dropped — youtube_tcp's own globals govern the
