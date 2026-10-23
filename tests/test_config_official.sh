@@ -729,6 +729,16 @@ test_corrupt_custom_strategy healthy \
     "--filter-tcp=443 --filter-l7=tls --lua-desync=fake:blob=z2k_custom_marker:strategy=1" \
     "0" "исправный пользовательский файл принимается"
 
+OUT_HTTP_TTL=$(run_generator "http-rkn-ttl" "")
+_http_arm=$(printf '%s\n' "$OUT_HTTP_TTL" | grep -- '--filter-tcp=80 ' | head -1)
+assert_contains "http_rkn: получает fool=z2k_dynamic_ttl при Z2K_DYNAMIC_TTL=1" "fool=z2k_dynamic_ttl" "$_http_arm"
+assert_contains "http_rkn: получает рандомизацию repeats=1-3" "repeats=1-3" "$_http_arm"
+
+OUT_HTTP_NOTTL=$(run_generator "http-rkn-nottl" "Z2K_DYNAMIC_TTL=0")
+_http_arm_nottl=$(printf '%s\n' "$OUT_HTTP_NOTTL" | grep -- '--filter-tcp=80 ' | head -1)
+assert_not_contains "http_rkn: без fool=z2k_dynamic_ttl при Z2K_DYNAMIC_TTL=0" "fool=z2k_dynamic_ttl" "$_http_arm_nottl"
+assert_contains "http_rkn: сохраняет repeats=1-3 при Z2K_DYNAMIC_TTL=0" "repeats=1-3" "$_http_arm_nottl"
+
 rm -rf "$MOCK_DIR"
 
 printf "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"

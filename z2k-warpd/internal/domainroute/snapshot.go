@@ -73,6 +73,8 @@ func (c *Cache) Load(path string, now time.Time) error {
 		return errors.New("invalid domain snapshot")
 	}
 	c.pairs = make(map[pair]map[string]time.Time)
+	c.clients = make(map[netip.Addr]int)
+	c.pairedCount = 0
 	for _, e := range s.Entries {
 		client, ce := netip.ParseAddr(e.Client)
 		dest, de := netip.ParseAddr(e.Dest)
@@ -89,6 +91,8 @@ func (c *Cache) Load(path string, now time.Time) error {
 				continue
 			}
 			c.pairs[k] = make(map[string]time.Time)
+			c.clients[client]++
+			c.pairedCount++
 		}
 		c.pairs[k][e.Name] = time.Unix(e.Expiry, 0)
 	}

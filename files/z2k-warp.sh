@@ -915,6 +915,15 @@ warp_op_begin() {
 # Всё ещё ли это действие последнее.
 warp_op_current() { [ "$(cat "$WARP_OP_FILE" 2>/dev/null)" = "$$" ]; }
 
+# Идёт ли сейчас другое действие с WARP (держит замок или ждёт готовности).
+warp_op_active() {
+    local pid
+    for pid in $(cat "$WARP_OP_LOCK/pid" "$WARP_OP_FILE" 2>/dev/null); do
+        [ -n "$pid" ] && [ "$pid" != "$$" ] && kill -0 "$pid" 2>/dev/null && return 0
+    done
+    return 1
+}
+
 warp_op_lock() {
     local waited=0 holder
     while ! mkdir "$WARP_OP_LOCK" 2>/dev/null; do
@@ -952,6 +961,9 @@ warp_op_superseded() {
 }
 
 warp_enable() {
+    if [ "${1:-}" = "--if-idle" ] || [ "${Z2K_WARP_IF_IDLE:-0}" = "1" ]; then
+        warp_op_active && return 0
+    fi
     warp_op_begin
     warp_op_lock || { warp_op_superseded; return 3; }
     warp_op_current || { warp_op_unlock; warp_op_superseded; return 3; }
@@ -1211,7 +1223,7 @@ warp_migrate_usque() {
 
 case "$1" in
     install)  warp_install ;;
-    enable)   warp_enable ;;
+    enable)   shift; warp_enable "$@" ;;
     disable)  warp_disable ;;
     restart)  warp_restart ;;
     license)  warp_license ;;
