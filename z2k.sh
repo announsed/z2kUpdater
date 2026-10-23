@@ -1382,6 +1382,16 @@ download_init_script() {
         die "Ошибка загрузки files/lua/z2k-fooling-ext.lua"
     fi
 
+    # badseq-фулинг и hostfakesplit altorder=1 из winws (Flowseal); стратегии
+    # ссылаются на них аргументами, модуль обязан лечь до старта движка.
+    url="${GITHUB_RAW}/files/lua/z2k-nfqws1-compat.lua"
+    output="${lua_dir}/z2k-nfqws1-compat.lua"
+    if z2k_fetch "$url" "$output"; then
+        print_success "Загружено: files/lua/z2k-nfqws1-compat.lua"
+    else
+        die "Ошибка загрузки files/lua/z2k-nfqws1-compat.lua"
+    fi
+
     # Phase 7: per-connection range randomisation for numeric strategy
     # args. Wraps fake/multisplit/fakedsplit/fakeddisorder/hostfakesplit
     # and resolves ranges like repeats=2-6 to sticky per-flow values.

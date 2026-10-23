@@ -1073,6 +1073,13 @@ LUA_Z2K_SILENCE="$ZAPRET_BASE/lua/z2k-silence.lua"
 # and before autocircular strategies that reference the new fools.
 LUA_Z2K_FOOLING="$ZAPRET_BASE/lua/z2k-fooling-ext.lua"
 [ -f "$LUA_Z2K_FOOLING" ] && LUAOPT="$LUAOPT --lua-init=@$LUA_Z2K_FOOLING"
+# z2k-nfqws1-compat.lua (23.10.2026): фулинг badseq (seq+ack, как в winws) и
+# hostfakesplit altorder=1 — приёмы Flowseal, которых в lua-движке нет.
+# Переопределяет глобали apply_fooling и hostfakesplit, поэтому грузится ПОСЛЕ
+# zapret-lib/zapret-antidpi и ДО z2k-range-rand.lua, чья обёртка должна лечь
+# поверх нашей.
+LUA_Z2K_NFQWS1_COMPAT="$ZAPRET_BASE/lua/z2k-nfqws1-compat.lua"
+[ -f "$LUA_Z2K_NFQWS1_COMPAT" ] && LUAOPT="$LUAOPT --lua-init=@$LUA_Z2K_NFQWS1_COMPAT"
 # Phase 7: z2k-range-rand.lua wraps upstream action functions (fake,
 # multisplit, fakedsplit, …) so strategies can use `repeats=2-6` style
 # range syntax on numeric args and get sticky per-flow randomised

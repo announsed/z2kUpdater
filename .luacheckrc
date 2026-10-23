@@ -134,6 +134,13 @@ read_globals = {
     "rawsend_opts",
     "rawsend_opts_base",
     "reconstruct_opts",
+    -- used by the hostfakesplit altorder=1 body in files/lua/z2k-nfqws1-compat.lua:
+    -- blob_or_def/zero_based_pos/genhost live in zapret-lib.lua, resolve_range
+    -- (like resolve_pos above) is an nfqws2 core function
+    "blob_or_def",
+    "resolve_range",
+    "zero_based_pos",
+    "genhost",
     "VERDICT_MODIFY",
     "IP_MF",
     "IP6F_MORE_FRAG",
