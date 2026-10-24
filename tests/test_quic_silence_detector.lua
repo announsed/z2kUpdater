@@ -106,4 +106,11 @@ H.test('configured capture limit is honored; success on the last packet wins',fu
     H.step(H.udp(d.track,true,H.quic('short','serverid'),nil,8,1))
     H.eq(nil,c.neutral); H.eq(true,c.nocheck); H.advance(20); H.eq(nil,h.failure_counter)
 end)
+H.test('zero-length client SCID still matches incoming server Handshake and Short headers',function()
+    local d=H.udp(nil,true,H.quic('initial','clientid',''),'quic_initial')
+    local h,c=H.step(d); h.failure_counter=2
+    H.step(H.udp(d.track,false,H.quic('initial','','serverid')..H.quic('handshake','','serverid')..H.quic('short','')))
+    H.step(H.udp(d.track,true,H.quic('short','serverid')))
+    H.eq(true,c.nocheck); H.eq(nil,c.failure); H.eq(nil,h.failure_counter)
+end)
 H.finish()
