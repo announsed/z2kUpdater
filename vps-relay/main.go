@@ -55,7 +55,7 @@ var (
 	v1Off                = flag.Bool("v1-off", false, "не принимать протокол v1: клиенты старее r-82.1 получают отказ v1_disabled и не поднимают сессию")
 	drainTimeout         = flag.Duration("drain-timeout", 90*time.Second, "сколько ждать сессии при остановке")
 	tlsListen            = flag.String("tls-listen", "", "адрес TLS-слушателя за nginx с proxy_protocol (пусто = выключен)")
-	acmeHost             = flag.String("acme-host", "", "имя для сертификата (SNI)")
+	acmeHost             = flag.String("acme-host", "", "имена для сертификатов (SNI), через запятую")
 	acmeCache            = flag.String("acme-cache", "", "каталог кеша autocert (внутри StateDirectory)")
 	acmeEmail            = flag.String("acme-email", "", "контакт ACME (необязательно)")
 	instanceName         = flag.String("instance", "", "имя экземпляра (a|b) для логов и метрик")

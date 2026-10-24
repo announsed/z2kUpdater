@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 func selfSigned(t *testing.T, host string) tls.Certificate {
@@ -142,4 +143,27 @@ func metricValue(name string) int64 {
 		}
 	}
 	return 0
+}
+
+func TestACMEHostsMigration(t *testing.T) {
+	for _, input := range []string{"213.176.74.63.nip.io", "85.192.60.175.nip.io, 213.176.74.63.nip.io"} {
+		hosts, err := acmeHosts(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		policy := autocert.HostWhitelist(hosts...)
+		for _, host := range hosts {
+			if err := policy(context.Background(), host); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := policy(context.Background(), "unrelated.example"); err == nil {
+			t.Fatal("unlisted hostname allowed")
+		}
+	}
+	for _, input := range []string{"", ",", "host.example,", "*.example", "https://host.example", "host.example:443", "bad..example", "-bad.example", "bad-.example"} {
+		if _, err := acmeHosts(input); err == nil {
+			t.Errorf("accepted invalid allowlist %q", input)
+		}
+	}
 }

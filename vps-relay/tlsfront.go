@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -27,9 +28,13 @@ func newTLSFront(handler http.Handler, addr, host, cache, email string) (*tlsFro
 	if host == "" || cache == "" {
 		return nil, fmt.Errorf("tls-front: нужны --acme-host и --acme-cache")
 	}
+	hosts, err := acmeHosts(host)
+	if err != nil {
+		return nil, err
+	}
 	mgr := &autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(host),
+		HostPolicy: autocert.HostWhitelist(hosts...),
 		Cache:      autocert.DirCache(cache),
 		Email:      email,
 	}
@@ -72,3 +77,26 @@ func (handshakeNoiseFilter) Write(p []byte) (int, error) {
 func (f *tlsFront) serve() error { return f.srv.Serve(f.ln) }
 
 func (f *tlsFront) shutdown(ctx context.Context) error { return f.srv.Shutdown(ctx) }
+
+// acmeHosts accepts an explicit comma-separated allowlist during IP migrations.
+func acmeHosts(value string) ([]string, error) {
+	hosts := strings.Split(value, ",")
+	for i, host := range hosts {
+		host = strings.ToLower(strings.TrimSpace(host))
+		if len(host) == 0 || len(host) > 253 || !strings.Contains(host, ".") {
+			return nil, fmt.Errorf("invalid ACME hostname %q", host)
+		}
+		for _, label := range strings.Split(host, ".") {
+			if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+				return nil, fmt.Errorf("invalid ACME hostname %q", host)
+			}
+			for _, c := range label {
+				if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+					return nil, fmt.Errorf("invalid ACME hostname %q", host)
+				}
+			}
+		}
+		hosts[i] = host
+	}
+	return hosts, nil
+}
