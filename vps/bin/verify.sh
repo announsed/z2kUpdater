@@ -11,7 +11,7 @@
 #
 # Использование: sh vps/bin/verify.sh [хост]
 set -e
-HOST="${1:-${Z2K_VPS_HOST:-213.176.74.63}}"
+HOST="${1:-${Z2K_VPS_HOST:-85.192.60.175}}"
 KEY="${Z2K_VPS_KEY:-$HOME/.ssh/z2k_vps_ed25519}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=12 -i $KEY root@$HOST"
@@ -235,8 +235,8 @@ if $SSH "ss -Hltnp 2>/dev/null | grep -q '127.0.0.1:8445.*z2k-vps-relay'"; then
 else
     printf '  8445         релей не слушает — трафик имени идёт мимо (или ещё caddy)\n'
 fi
-if $SSH "test -s /var/lib/z2k-relay/acme/213.176.74.63.nip.io"; then
-    printf '  сертификат   в кеше autocert: %s\n' "$($SSH "openssl x509 -in /var/lib/z2k-relay/acme/213.176.74.63.nip.io -noout -enddate 2>/dev/null")"
+if $SSH "test -s /var/lib/z2k-relay/acme/85.192.60.175.nip.io"; then
+    printf '  сертификат   в кеше autocert: %s\n' "$($SSH "openssl x509 -in /var/lib/z2k-relay/acme/85.192.60.175.nip.io -noout -enddate 2>/dev/null")"
 else
     printf '  сертификат   кеш autocert пуст — до релиза TLS-фронта импортировать из caddy\n'
 fi

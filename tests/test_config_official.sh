@@ -380,6 +380,24 @@ test_disable_ipv6() {
     rm -rf "$root"
 }
 
+# Endpoint overrides must survive the real generator, not only installer restore.
+(
+    root="${MOCK_DIR}/relay-overrides"
+    mkdir -p "$root/lists"
+    cat > "$root/config" <<'CFG'
+Z2K_RELAY_URL="wss://reseller.example/ws"
+Z2K_RELAY_SECRET="test-secret"
+Z2K_WARP_VPS_PROXY="http://custom.example:8119"
+Z2K_VPS_GH_IP="203.0.113.9"
+Z2K_OPKG_VPS="203.0.113.10"
+CFG
+    cp "$root/config" "$root/expected"
+    ZAPRET2_DIR="$root" create_official_config "$root/config" >/dev/null 2>&1 || exit 1
+    grep -E '^Z2K_(RELAY_URL|RELAY_SECRET|WARP_VPS_PROXY|VPS_GH_IP|OPKG_VPS)=' "$root/config" > "$root/actual"
+    cmp "$root/expected" "$root/actual"
+)
+assert_eq "custom relay/proxy settings survive config regeneration" "0" "$?"
+
 DI6_OUT=$(test_disable_ipv6 "file1" "DISABLE_IPV6=1" "")
 assert_contains "DISABLE_IPV6=1 from file survives regen, env unset (p-30 regression)" "DISABLE_IPV6=1" "$DI6_OUT"
 

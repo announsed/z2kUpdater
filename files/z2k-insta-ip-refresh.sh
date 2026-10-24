@@ -41,7 +41,7 @@ fi
 mkdir -p /tmp/z2k-log 2>/dev/null && chown root /tmp/z2k-log 2>/dev/null
 chmod 700 /tmp/z2k-log 2>/dev/null
 CONFIG="${CONFIG_FILE:-/opt/zapret2/config}"
-RELAY_URL="https://213.176.74.63.nip.io/resolve"
+RELAY_URL="https://85.192.60.175.nip.io/resolve"
 # АДРЕС РЕЛЕЯ БЕРЁМ ИЗ ИМЕНИ, А НЕ У РЕЗОЛВЕРА.
 # nip.io — wildcard-DNS: ответ по определению равен первым четырём меткам хоста.
 # Спрашивать его значит без нужды зависеть от резолвера роутера, а он у людей

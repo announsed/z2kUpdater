@@ -61,7 +61,7 @@ export GITHUB_RAW
 # GitHub — значит обычный `--resolve <githubhost>:443:<VPS>` качает по TLS с
 # валидным сертом, без pin/конфига. Транзиентно per-request (в отличие от
 # лишней тяжёлой попытки скачивания). Overridable через env.
-Z2K_VPS_GH_IP="${Z2K_VPS_GH_IP:-213.176.74.63}"
+Z2K_VPS_GH_IP="${Z2K_VPS_GH_IP:-85.192.60.175}"
 export Z2K_VPS_GH_IP
 
 # Бюджет коннекта Layer 0 и число попыток.

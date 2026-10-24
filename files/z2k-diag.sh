@@ -40,7 +40,7 @@ set -u
 
 ZAPRET2_DIR="${ZAPRET2_DIR:-/opt/zapret2}"
 INIT_SCRIPT="${INIT_SCRIPT:-/opt/etc/init.d/S99zapret2}"
-VPS_IP="${VPS_IP:-213.176.74.63}"
+VPS_IP="${VPS_IP:-85.192.60.175}"
 
 MODE="full"
 case "${1:-}" in

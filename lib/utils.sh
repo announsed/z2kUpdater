@@ -56,7 +56,7 @@ GITHUB_RAW="${GITHUB_RAW:-https://raw.githubusercontent.com/necronicle/z2k/z2k-e
 # RU блокирует Fastly anycast github; наш VPS форвардит SNI-совпавшие
 # github(usercontent) хосты на реальный backend с сертом github → обычный
 # `--resolve <host>:443:<VPS>` качает по валидному TLS. Транзиентно.
-Z2K_VPS_GH_IP="${Z2K_VPS_GH_IP:-213.176.74.63}"
+Z2K_VPS_GH_IP="${Z2K_VPS_GH_IP:-85.192.60.175}"
 
 # Бюджет коннекта Layer 0 и число попыток.
 #
@@ -112,7 +112,7 @@ _z2k_vps_gh_resolve() {
 # curl нет или opkg передал незнакомый ключ — настоящий wget.
 #
 # Глобальный opkg.conf не трогаем: свои `opkg update` человек делает как раньше.
-Z2K_OPKG_VPS="${Z2K_OPKG_VPS:-${Z2K_VPS_GH_IP:-213.176.74.63}}"
+Z2K_OPKG_VPS="${Z2K_OPKG_VPS:-${Z2K_VPS_GH_IP:-85.192.60.175}}"
 
 # Текст временного wget. Адрес узла вшивается при создании: скрипт
 # самодостаточен, его можно получить и без остального utils.sh (панель).

@@ -144,6 +144,9 @@ start() {
         _rs=$(awk -F= '/^Z2K_RELAY_SECRET=/ {gsub(/[" ]/,"",$2); print $2; exit}' /opt/zapret2/config)
         _ru=$(awk -F= '/^Z2K_RELAY_URL=/ {gsub(/[" ]/,"",$2); print $2; exit}' /opt/zapret2/config)
         [ -n "$_rs" ] && TUNNEL_FLAGS="$TUNNEL_FLAGS --tunnel-secret=$_rs"
+        case "$_ru" in
+            wss://213.176.74.63.nip.io/ws) _ru="wss://85.192.60.175.nip.io/ws" ;;
+        esac
         [ -n "$_ru" ] && TUNNEL_FLAGS="$TUNNEL_FLAGS --tunnel-url=$_ru"
     fi
     _sup_gen="$(date +%s 2>/dev/null || echo 0).$$"

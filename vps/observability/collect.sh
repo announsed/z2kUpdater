@@ -12,7 +12,7 @@
 #   sh vps/observability/collect.sh 300      — окно 5 мин
 set -e
 WIN="${1:-60}"
-HOST="${Z2K_VPS_HOST:-213.176.74.63}"
+HOST="${Z2K_VPS_HOST:-85.192.60.175}"
 KEY="${Z2K_VPS_KEY:-$HOME/.ssh/z2k_vps_ed25519}"
 
 ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i "$KEY" "root@$HOST" "WIN=$WIN bash -s" <<'REMOTE'

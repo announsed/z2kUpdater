@@ -3814,7 +3814,38 @@ z2k_instagram_dns_add_fallback() {
     return 0
 }
 
+# Move only exact former stock endpoints. Reseller/custom URLs and secrets stay intact.
+migrate_vps_endpoints() {
+    local cfg="$1" tmp="${1}.vps-migrate.$$"
+    [ -f "$cfg" ] || return 0
+    (umask 077; awk '
+        BEGIN {
+            old["Z2K_RELAY_URL"]="wss://213.176.74.63.nip.io/ws"
+            new["Z2K_RELAY_URL"]="wss://85.192.60.175.nip.io/ws"
+            old["Z2K_WARP_VPS_PROXY"]="http://z2kwarp:z2kW4rpR3g2026@213.176.74.63:8119"
+            new["Z2K_WARP_VPS_PROXY"]="http://z2kwarp:z2kW4rpR3g2026@85.192.60.175:8119"
+            old["Z2K_VPS_GH_IP"]="213.176.74.63"; new["Z2K_VPS_GH_IP"]="85.192.60.175"
+            old["Z2K_OPKG_VPS"]="213.176.74.63"; new["Z2K_OPKG_VPS"]="85.192.60.175"
+        }
+        {
+            pos=index($0,"="); key=substr($0,1,pos-1); value=substr($0,pos+1)
+            gsub(/^[ \t]+|[ \t]+$/, "", value)
+            quote=substr(value,1,1)
+            if ((quote == "\"" || quote == sprintf("%c",39)) && substr(value,length(value),1) == quote) value=substr(value,2,length(value)-2)
+            if (key in old && value == old[key]) print key "=\"" new[key] "\""
+            else print
+        }
+    ' "$cfg" > "$tmp") || { rm -f "$tmp"; return 1; }
+    # Keep the existing file permissions (config may contain a private secret).
+    cat "$tmp" > "$cfg"
+    local rc=$?
+    rm -f "$tmp"
+    return "$rc"
+}
+
 step_finalize() {
+    migrate_vps_endpoints "$ZAPRET2_DIR/config" || return 1
+    migrate_vps_endpoints "$Z2K_UPGRADE_BACKUP/config" || return 1
     print_header "Шаг 12/12: Финализация установки"
 
     # =====================================================================
@@ -4076,7 +4107,7 @@ step_finalize() {
     # survive reinstalls; this block also re-asserts them idempotently and
     # upgrades any stale (e.g. facebook-edge) pins to the VPS.
     if command -v ndmc >/dev/null 2>&1; then
-        local relay_vps="213.176.74.63"
+        local relay_vps="85.192.60.175"
         # RELAY ONLY the geo-WAF'd app endpoints. The CDN/asset hosts (ticketm.net,
         # tmol.io/.co, *.ticketmaster.com static/js/media) are Fastly and return 200
         # DIRECT from a RU IP — they are NOT geo-blocked. r-52 wrongly pinned them
@@ -5432,6 +5463,7 @@ uninstall_zapret2() {
     if command -v ndmc >/dev/null 2>&1; then
         for _rel_dom in whatsapp.com www.whatsapp.com web.whatsapp.com whatsapp.net g.whatsapp.net static.whatsapp.net mmg.whatsapp.net pps.whatsapp.net dit.whatsapp.net v.whatsapp.net crashlogs.whatsapp.net ticketmaster.com www.ticketmaster.com app.ticketmaster.com api.ticketmaster.com auth.ticketmaster.com identity.ticketmaster.com checkout.ticketmaster.com checkout.prod.ticketmaster.com secure-entry.ticketmaster.com my.ticketmaster.com pubapi.ticketmaster.com help.ticketmaster.com blog.ticketmaster.com legal.ticketmaster.com travel.ticketmaster.com privacy.ticketmaster.com business.ticketmaster.com offeradapter.ticketmaster.com rsvp.ticketmaster.com spon.ticketmaster.com fan-wallet.ticketmaster.com developer.ticketmaster.com static.ticketmaster.com js.ticketmaster.com media.ticketmaster.com s1.ticketm.net media.ticketm.net spon.ticketmaster.net prismic-images.tmol.io mapsapi.tmol.io venue.tmol.co; do
             LD_LIBRARY_PATH= ndmc -c "no ip host $_rel_dom 213.176.74.63" >/dev/null 2>&1 || true
+            LD_LIBRARY_PATH= ndmc -c "no ip host $_rel_dom 85.192.60.175" >/dev/null 2>&1 || true
         done
         LD_LIBRARY_PATH= ndmc -c "system configuration save" >/dev/null 2>&1 || true
     fi

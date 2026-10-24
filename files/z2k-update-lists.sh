@@ -30,7 +30,7 @@ GITHUB_RAW="${GITHUB_RAW:-https://raw.githubusercontent.com/necronicle/z2k/z2k-e
 # VPS SNI-passthrough egress для GitHub — см. z2k.sh для полного docstring.
 # RU блокирует Fastly anycast github; VPS форвардит github-хосты на реальный
 # backend с сертом github → `--resolve <host>:443:<VPS>` качает по валидному TLS.
-Z2K_VPS_GH_IP="${Z2K_VPS_GH_IP:-213.176.74.63}"
+Z2K_VPS_GH_IP="${Z2K_VPS_GH_IP:-85.192.60.175}"
 
 # Бюджет коннекта Layer 0 и число попыток.
 #

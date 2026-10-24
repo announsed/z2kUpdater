@@ -76,7 +76,11 @@ WARP_LEGACY_INIT="${WARP_LEGACY_INIT:-/opt/etc/init.d/S51usque}"
 WARP_LEGACY_DIR="${WARP_LEGACY_DIR:-/opt/etc/z2k-warp}"
 # Регистрация через VPS-релей, если API заблокирован напрямую (как было).
 [ -f "$CONFIG_FILE" ] && _warp_cfg_proxy=$(grep -m1 '^Z2K_WARP_VPS_PROXY=' "$CONFIG_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"')
-WARP_VPS_PROXY="${WARP_VPS_PROXY:-${_warp_cfg_proxy:-http://z2kwarp:z2kW4rpR3g2026@213.176.74.63:8119}}"
+WARP_VPS_PROXY="${WARP_VPS_PROXY:-${_warp_cfg_proxy:-http://z2kwarp:z2kW4rpR3g2026@85.192.60.175:8119}}"
+# Only the former stock endpoint moves; custom proxies keep their settings.
+case "$WARP_VPS_PROXY" in
+    http://z2kwarp:z2kW4rpR3g2026@213.176.74.63:8119) WARP_VPS_PROXY="http://z2kwarp:z2kW4rpR3g2026@85.192.60.175:8119" ;;
+esac
 
 # КОРНИ TLS ДЛЯ API CLOUDFLARE. Движок — Go, а Go проверяет сертификат по
 # СИСТЕМНОМУ хранилищу: на Keenetic это то, что положила прошивка, плюс то, что

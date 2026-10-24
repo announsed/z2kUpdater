@@ -93,7 +93,7 @@ Z2K_RKN_FP_COPY="${Z2K_RKN_FP_COPY:-/opt/etc/.z2k-rkn-fp.list}"
 # форвардит github-хосты (включая releases-редиректы objects/release-assets/
 # codeload) на реальный backend с валидным сертом github. `--resolve` —
 # транзиентный, per-request, без записей в конфиг.
-Z2K_VPS_GH_IP="${Z2K_VPS_GH_IP:-213.176.74.63}"
+Z2K_VPS_GH_IP="${Z2K_VPS_GH_IP:-85.192.60.175}"
 # Те же ручки Layer 0, что у трёх остальных копий транспорта (z2k.sh,
 # lib/utils.sh, files/z2k-update-lists.sh). Этот файл — ЧЕТВЁРТАЯ точка выхода
 # на VPS, и правка бюджета до него не доехала: тут стоял зашитый

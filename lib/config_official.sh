@@ -2486,6 +2486,12 @@ EOF
         return 1
     fi
 
+    # Relay/proxy overrides are optional and are not emitted by the template.
+    # Preserve them across regeneration, including custom reseller endpoints.
+    if [ -f "$_cfg_target" ]; then
+        grep -E '^Z2K_(RELAY_URL|RELAY_SECRET|WARP_VPS_PROXY|VPS_GH_IP|OPKG_VPS)=' "$_cfg_target" >> "$config_file" || true
+    fi
+
     # Подмена одним rename: на той же ФС это атомарно, и сорсящий init-скрипт
     # видит либо старый конфиг целиком, либо новый целиком, но не половину.
     if ! mv -f "$config_file" "$_cfg_target"; then

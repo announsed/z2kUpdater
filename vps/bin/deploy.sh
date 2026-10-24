@@ -22,7 +22,7 @@ set -e
 
 APPLY=0
 [ "$1" = "--apply" ] && { APPLY=1; shift; }
-HOST="${1:-${Z2K_VPS_HOST:-213.176.74.63}}"
+HOST="${1:-${Z2K_VPS_HOST:-85.192.60.175}}"
 KEY="${Z2K_VPS_KEY:-$HOME/.ssh/z2k_vps_ed25519}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=12 -i $KEY root@$HOST"

@@ -3,7 +3,7 @@
 Что делать в конкретной ситуации. Каждая процедура заканчивается ЗАМЕРОМ —
 операция считается выполненной только после того, как факт подтверждён.
 
-Доступ: `ssh -i ~/.ssh/z2k_vps_ed25519 root@213.176.74.63`. Только по ключу.
+Доступ: `ssh -i ~/.ssh/z2k_vps_ed25519 root@85.192.60.175`. Только по ключу.
 
 ## Прежде чем трогать что-либо
 
@@ -148,10 +148,10 @@ cd vps-relay && ulimit -n 20000 && go test -tags load -run TestLoad_3000Sessions
 
 ```
 cd vps-relay && PATH=<go1.25.13>:$PATH sh deploy/build.sh
-scp -O vps-relay/z2k-vps-relay root@213.176.74.63:/usr/local/bin/z2k-vps-relay.new
-ssh root@213.176.74.63 'cp -p /usr/local/bin/z2k-vps-relay /usr/local/bin/z2k-vps-relay.prev && mv -f /usr/local/bin/z2k-vps-relay.new /usr/local/bin/z2k-vps-relay'
+scp -O vps-relay/z2k-vps-relay root@85.192.60.175:/usr/local/bin/z2k-vps-relay.new
+ssh root@85.192.60.175 'cp -p /usr/local/bin/z2k-vps-relay /usr/local/bin/z2k-vps-relay.prev && mv -f /usr/local/bin/z2k-vps-relay.new /usr/local/bin/z2k-vps-relay'
 sh vps/bin/deploy.sh --apply              # юнит/скрипты; nginx перезагружается только если менялся
-ssh root@213.176.74.63 'sh /opt/z2k-vps/bin/relay-switch.sh'   # поднимает спящий, проверяет, гасит работающий (drain до 120 с)
+ssh root@85.192.60.175 'sh /opt/z2k-vps/bin/relay-switch.sh'   # поднимает спящий, проверяет, гасит работающий (drain до 120 с)
 ```
 Откат: вернуть `.prev` тем же `mv` и снова `relay-switch.sh`.
 
@@ -160,7 +160,7 @@ ssh root@213.176.74.63 'sh /opt/z2k-vps/bin/relay-switch.sh'   # поднима�
   `a` уже с 8080; следующий `relay-switch.sh` вернёт схему в норму.
 - `http: TLS handshake error … EOF` в журнале — клиенты и сканеры, закрывшие
   соединение до конца рукопожатия; это не отказ.
-- Сертификат: кеш autocert `/var/lib/z2k-relay/acme/213.176.74.63.nip.io`,
+- Сертификат: кеш autocert `/var/lib/z2k-relay/acme/85.192.60.175.nip.io`,
   импортирован из caddy 02.09.2026 (годен до 08.11.2026). Продление — сам
   autocert через TLS-ALPN за 30 дней до конца; проверить в начале октября:
   `journalctl -u 'z2k-relay@*' | grep -i acme`.

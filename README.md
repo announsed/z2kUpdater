@@ -119,10 +119,11 @@ opkg install coreutils-sort curl grep gzip ipset iptables kmod_ndms xtables-addo
 У части провайдеров сервер пакетов Entware (`bin.entware.net`) обрывает загрузку на первых десятках килобайт, и `opkg` висит без конца. Возьмите пакеты через зеркало на узле проекта z2k — оно отдаёт только `bin.entware.net` и больше ничего:
 
 ```bash
-sed -i 's|http://bin.entware.net|http://213.176.74.63/entware|g' /opt/etc/opkg.conf
+sed -i 's|http://bin.entware.net|http://85.192.60.175/entware|g' /opt/etc/opkg.conf
+sed -i 's|http://213.176.74.63/entware|http://85.192.60.175/entware|g' /opt/etc/opkg.conf
 opkg update
 opkg install coreutils-sort curl grep gzip ipset iptables kmod_ndms xtables-addons_legacy openssl-util
-sed -i 's|http://213.176.74.63/entware|http://bin.entware.net|g' /opt/etc/opkg.conf
+sed -i 's|http://85.192.60.175/entware|http://bin.entware.net|g' /opt/etc/opkg.conf
 ```
 
 Последняя строка возвращает основной сервер в настройки `opkg`.
@@ -145,7 +146,7 @@ opkg update
 ### 3) Установка z2k
 
 ```bash
-{ curl --resolve raw.githubusercontent.com:443:213.176.74.63 -fsSL https://raw.githubusercontent.com/necronicle/z2k/z2k-enhanced/z2k.sh || curl -fsSL https://raw.githubusercontent.com/necronicle/z2k/z2k-enhanced/z2k.sh; } | sh
+{ curl --resolve raw.githubusercontent.com:443:85.192.60.175 -fsSL https://raw.githubusercontent.com/necronicle/z2k/z2k-enhanced/z2k.sh || curl -fsSL https://raw.githubusercontent.com/necronicle/z2k/z2k-enhanced/z2k.sh; } | sh
 ```
 
 ### 4) Windows: если сайты висят и не открываются
@@ -171,7 +172,7 @@ netsh interface tcp set global timestamps=disabled
 Меню открывается **той же командой, что и установка** — если z2k уже установлен, она просто открывает меню (а если ещё нет — ставит и открывает):
 
 ```bash
-{ curl --resolve raw.githubusercontent.com:443:213.176.74.63 -fsSL https://raw.githubusercontent.com/necronicle/z2k/z2k-enhanced/z2k.sh || curl -fsSL https://raw.githubusercontent.com/necronicle/z2k/z2k-enhanced/z2k.sh; } | sh
+{ curl --resolve raw.githubusercontent.com:443:85.192.60.175 -fsSL https://raw.githubusercontent.com/necronicle/z2k/z2k-enhanced/z2k.sh || curl -fsSL https://raw.githubusercontent.com/necronicle/z2k/z2k-enhanced/z2k.sh; } | sh
 ```
 
 | Пункт | Описание |
@@ -655,7 +656,7 @@ some-blocked-site.org
 Если zapret или zapret2 были удалены некорректно, остались зависшие процессы или мусорные правила — используйте скрипт полной зачистки:
 
 ```bash
-{ curl --resolve raw.githubusercontent.com:443:213.176.74.63 -fsSL https://raw.githubusercontent.com/necronicle/z2k/z2k-enhanced/z2k_cleanup.sh || curl -fsSL https://raw.githubusercontent.com/necronicle/z2k/z2k-enhanced/z2k_cleanup.sh; } | sh
+{ curl --resolve raw.githubusercontent.com:443:85.192.60.175 -fsSL https://raw.githubusercontent.com/necronicle/z2k/z2k-enhanced/z2k_cleanup.sh || curl -fsSL https://raw.githubusercontent.com/necronicle/z2k/z2k-enhanced/z2k_cleanup.sh; } | sh
 ```
 
 **ВНИМАНИЕ:** Скрипт удаляет ВСЁ связанное с zapret и zapret2:
@@ -810,3 +811,12 @@ Z2K_TRUST_NEW_KEY=<отпечаток> sh z2k.sh install
 ## Лицензия
 
 MIT
+
+### Смена адреса служебного сервера (24 октября 2026)
+
+Основной адрес z2k — `85.192.60.175`, имя релея — `85.192.60.175.nip.io`.
+Сервер и учётные данные остаются прежними. Обновление переносит штатные
+адреса Telegram, WhatsApp, WARP и загрузки файлов; собственные адреса релея
+и прокси сохраняются. Старое имя TLS продолжает обслуживаться для клиентов,
+которые ещё не обновились. Если старый адрес недоступен и автообновление
+не загружается, выполните команду переустановки из раздела установки выше.

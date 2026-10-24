@@ -25,7 +25,7 @@ var buildVersion = "dev"
 
 var (
 	listenAddrs  listenList
-	tunnelURL    = flag.String("tunnel-url", "wss://213.176.74.63.nip.io/ws", "Tunnel relay WebSocket URL")
+	tunnelURL    = flag.String("tunnel-url", "wss://85.192.60.175.nip.io/ws", "Tunnel relay WebSocket URL")
 	tunnelSecret = flag.String("tunnel-secret", defaultTunnelSecret, "Shared secret for tunnel auth (build-injected; override with --tunnel-secret)")
 	verbose      = flag.Bool("v", false, "Verbose logging")
 	connTimeout  = flag.Duration("timeout", 15*time.Minute, "Idle connection timeout")
