@@ -31,24 +31,56 @@
 -- Огрубление до /16 (v4) и /32 (v6) намеренное: точных префиксов у этих AS
 -- около 52 тысяч, а огрублённых — 6 тысяч. Цена — имя достанется соседям по
 -- /16; замерено, что лишний фейк рабочим сайтам не мешает.
-local z2k_nets, z2k_nets_loaded = nil, false
+--
+-- Ночной перемер (03:30) и ручная проба обновляют state/tcp16_asn.txt и
+-- state/tcp16_sni.txt без рестарта nfqws2, когда флаг Z2K_TCP16_ENABLED не
+-- менялся (want == have == 1). Поэтому раз в Z2K_MAP_RECHECK секунд (по
+-- умолчанию 60 с) перечитываем маленькие файлы состояния; 6000 строк
+-- tcp16_nets.txt пересобираем ТОЛЬКО если изменился состав подтверждённых AS.
+local Z2K_MAP_RECHECK = tonumber(os.getenv("Z2K_MAP_RECHECK")) or 60
+local z2k_nets, z2k_nets_at, z2k_nets_sig = nil, 0, nil
 local function z2k_nets_load()
-	if z2k_nets_loaded then return z2k_nets end
-	z2k_nets_loaded = true
+	local now = os.time()
+	if z2k_nets_at > 0 and now < (z2k_nets_at + Z2K_MAP_RECHECK) then
+		return z2k_nets
+	end
+	z2k_nets_at = now
 	local asnpath = os.getenv("Z2K_TCP16_ASN") or "/opt/zapret2/state/tcp16_asn.txt"
 	local f = io.open(asnpath, "r")
-	if not f then return nil end
-	local want, n = {}, 0
+	if not f then
+		z2k_nets = nil
+		z2k_nets_sig = nil
+		return nil
+	end
+	local want, list, n = {}, {}, 0
 	for line in f:lines() do
 		local a = line:match("^(%d+)")
-		if a then want[a] = true; n = n + 1 end
+		if a and not want[a] then
+			want[a] = true
+			n = n + 1
+			list[n] = a
+		end
 	end
 	f:close()
-	if n == 0 then return nil end
+	if n == 0 then
+		z2k_nets = nil
+		z2k_nets_sig = nil
+		return nil
+	end
+	table.sort(list)
 
 	local netpath = os.getenv("Z2K_TCP16_NETS") or "/opt/zapret2/lists/tcp16_nets.txt"
+	local sig = netpath .. "|" .. table.concat(list, ",")
+	if sig == z2k_nets_sig and z2k_nets then
+		return z2k_nets
+	end
+
 	local nf = io.open(netpath, "r")
-	if not nf then return nil end
+	if not nf then
+		z2k_nets = nil
+		z2k_nets_sig = nil
+		return nil
+	end
 	local set, cnt = {}, 0
 	for line in nf:lines() do
 		local a, p = line:match("^(%d+)\t([^%s]+)")
@@ -69,9 +101,14 @@ local function z2k_nets_load()
 		end
 	end
 	nf:close()
-	if cnt == 0 then return nil end
+	if cnt == 0 then
+		z2k_nets = nil
+		z2k_nets_sig = nil
+		return nil
+	end
 	DLOG("z2k_tcp16: карта сетей загружена, " .. cnt .. " записей")
 	z2k_nets = set
+	z2k_nets_sig = sig
 	return set
 end
 
@@ -100,20 +137,29 @@ end
 -- Одного имени на всех не бывает. Замер 30.08.2026 на линии владельца:
 -- hcaptcha.com бьёт двадцать AS, но НЕ Hetzner; Hetzner, DigitalOcean и OVH
 -- берёт 300.ya.ru; Melbicom — ad.adriver.ru; семь AS не берёт ничто из списка.
-local z2k_asn_sni, z2k_asn_sni_loaded = nil, false
+local z2k_asn_sni, z2k_asn_sni_at = nil, 0
 local function z2k_asn_sni_load()
-	if z2k_asn_sni_loaded then return z2k_asn_sni end
-	z2k_asn_sni_loaded = true
+	local now = os.time()
+	if z2k_asn_sni_at > 0 and now < (z2k_asn_sni_at + Z2K_MAP_RECHECK) then
+		return z2k_asn_sni
+	end
+	z2k_asn_sni_at = now
 	local path = os.getenv("Z2K_TCP16_SNI") or "/opt/zapret2/state/tcp16_sni.txt"
 	local f = io.open(path, "r")
-	if not f then return nil end
+	if not f then
+		z2k_asn_sni = nil
+		return nil
+	end
 	local m, n = {}, 0
 	for line in f:lines() do
 		local a, nm = line:match("^(%d+)\t([%w%.%-]+)")
 		if a and nm then m[a] = nm; n = n + 1 end
 	end
 	f:close()
-	if n == 0 then return nil end
+	if n == 0 then
+		z2k_asn_sni = nil
+		return nil
+	end
 	DLOG("z2k_tcp16: карта имён по сетям загружена, " .. n .. " сетей")
 	z2k_asn_sni = m
 	return m
@@ -148,7 +194,10 @@ end
 -- чужое незачем. Адрес вне карты — сети с блоком его не покрывают, имя не нужно.
 function z2k_sni_for(desync, pin)
 	local m = z2k_asn_sni_load()
-	if not m then return pin end
+	if not m then
+		if pin ~= nil then return pin end
+		return z2k_sni_pinned()
+	end
 	local asn = z2k_asn_of(desync)
 	if asn and m[asn] then return m[asn] end
 	return nil
@@ -171,7 +220,7 @@ function z2k_sni_pick(ctx, desync)
 	if not (direction_check(desync) and payload_check(desync)) then return end
 	if not replay_first(desync) then return end
 
-	local name = z2k_sni_for(desync, z2k_sni_pinned())
+	local name = z2k_sni_for(desync)
 	if not name then return end
 
 	-- КЛОН НАСТОЯЩЕГО HELLO, а не чужое тело с подменённым именем (решение
