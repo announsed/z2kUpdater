@@ -24,29 +24,76 @@ WARP_LISTS_DIR="${WARP_LISTS_DIR:-$LISTS_DIR/warp}"
 
 # --- read helpers (POSIX sh, no sourcing of lib/utils.sh required) ---
 
-read_flag() {
-    # read_flag <key> <file> [default]
-    local key="$1" file="$2" def="${3:-0}"
-    [ -f "$file" ] || { printf '%s' "$def"; return 0; }
-    local raw val
-    raw=$(grep "^${key}=" "$file" 2>/dev/null | head -1)
-    if [ -z "$raw" ]; then
-        printf '%s' "$def"
-        return 0
-    fi
+_parse_flag_raw() {
+    # _parse_flag_raw <raw_line> <default> -> sets _pf_val
     # Кавычки снимаем оба вида: генератор пишет значение в двойных
     # (config_official.sh), set_flag — в одинарных. Разворачивать shell-эскейп
     # апострофа ('\'') здесь НЕЛЬЗЯ: safe_config_read из lib/utils.sh его тоже не
     # разворачивает, и панель показывала бы не то имя политики, с которым реально
     # работает сервис.
-    val=$(printf '%s' "$raw" | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/^"//; s/"$//; s/^'\''//; s/'\''$//')
+    local val="${1#*=}" def="${2:-0}"
+    val="${val#"${val%%[![:space:]]*}"}"
+    val="${val%"${val##*[![:space:]]}"}"
+    val="${val#\"}"
+    val="${val%\"}"
+    val="${val#\'}"
+    val="${val%\'}"
     # An empty value (e.g. `DROP_DPI_RST=` with nothing after the equals)
     # must fall back to the default, not propagate as "" — otherwise the
     # caller's printf emits `"key":,` which breaks JSON. Caught in the wild
     # on Владислав's router 2026-04-15 after a reinstall left DROP_DPI_RST
     # with no value.
     [ -z "$val" ] && val="$def"
-    printf '%s' "$val"
+    _pf_val="$val"
+}
+
+read_flag() {
+    # read_flag <key> <file> [default]
+    local key="$1" file="$2" def="${3:-0}"
+    [ -f "$file" ] || { printf '%s' "$def"; return 0; }
+    local line="" raw="" _pf_val=""
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            "${key}="*) raw="$line"; break ;;
+        esac
+    done < "$file"
+    if [ -z "$raw" ]; then
+        printf '%s' "$def"
+        return 0
+    fi
+    _parse_flag_raw "$raw" "$def"
+    printf '%s' "$_pf_val"
+}
+
+# Read all 10 dashboard /status flags in a single pass without subshells.
+load_status_flags() {
+    local file="$1" line="" _pf_val=""
+    local _s_cd=0 _s_yt=0 _s_rkn=0 _s_dv=0 _s_ttl=0 _s_ppe=0 _s_au=0 _s_auh=0 _s_ahl=0 _s_gw=0
+    disable_cd="1"
+    category_youtube="1"
+    category_rkn="1"
+    category_discord_voice="1"
+    dynamic_ttl="1"
+    ppe="1"
+    auto_update="1"
+    au_hour="02"
+    autohostlist="0"
+    game_warp="0"
+    [ -f "$file" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            DISABLE_CUSTOM=*)             [ "$_s_cd" = 0 ]  && { _s_cd=1;  _parse_flag_raw "$line" "1";  disable_cd="$_pf_val"; } ;;
+            Z2K_CATEGORY_YOUTUBE=*)       [ "$_s_yt" = 0 ]  && { _s_yt=1;  _parse_flag_raw "$line" "1";  category_youtube="$_pf_val"; } ;;
+            Z2K_CATEGORY_RKN=*)           [ "$_s_rkn" = 0 ] && { _s_rkn=1; _parse_flag_raw "$line" "1";  category_rkn="$_pf_val"; } ;;
+            Z2K_CATEGORY_DISCORD_VOICE=*) [ "$_s_dv" = 0 ]  && { _s_dv=1;  _parse_flag_raw "$line" "1";  category_discord_voice="$_pf_val"; } ;;
+            Z2K_DYNAMIC_TTL=*)            [ "$_s_ttl" = 0 ] && { _s_ttl=1; _parse_flag_raw "$line" "1";  dynamic_ttl="$_pf_val"; } ;;
+            Z2K_PPE_DEOFFLOAD=*)          [ "$_s_ppe" = 0 ] && { _s_ppe=1; _parse_flag_raw "$line" "1";  ppe="$_pf_val"; } ;;
+            Z2K_AUTO_UPDATE_ENABLED=*)    [ "$_s_au" = 0 ]  && { _s_au=1;  _parse_flag_raw "$line" "1";  auto_update="$_pf_val"; } ;;
+            Z2K_AU_HOUR=*)                [ "$_s_auh" = 0 ] && { _s_auh=1; _parse_flag_raw "$line" "02"; au_hour="$_pf_val"; } ;;
+            Z2K_AUTOHOSTLIST=*)           [ "$_s_ahl" = 0 ] && { _s_ahl=1; _parse_flag_raw "$line" "0";  autohostlist="$_pf_val"; } ;;
+            GAME_WARP_ENABLED=*)          [ "$_s_gw" = 0 ]  && { _s_gw=1;  _parse_flag_raw "$line" "0";  game_warp="$_pf_val"; } ;;
+        esac
+    done < "$file"
 }
 
 # set_flag живёт в lib/utils.sh — там же, где его видит и меню.

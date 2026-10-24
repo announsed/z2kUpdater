@@ -50,15 +50,24 @@ function z2k_nohost_key(desync)
     return "nohost"
 end
 
+local DEFAULT_NLD2_ARG = { nld = "2" }
+
 -- Share subdomains using native nld=2; preserve packet hostname, IP literals,
 -- address-family splitting and hostless fallback semantics of the native core.
 function z2k_service_hostkey(desync)
-    local copy, arg = {}, {}
-    for k, v in pairs(desync) do copy[k] = v end
-    for k, v in pairs(desync.arg) do arg[k] = v end
-    arg.nld = "2"
-    copy.arg = arg
-    return standard_hostkey(copy)
+    if not desync then return nil end
+    local arg = desync.arg
+    if type(arg) == "table" then
+        local prev_nld = arg.nld
+        arg.nld = "2"
+        local hk = standard_hostkey(desync)
+        arg.nld = prev_nld
+        return hk
+    end
+    desync.arg = DEFAULT_NLD2_ARG
+    local hk = standard_hostkey(desync)
+    desync.arg = arg
+    return hk
 end
 
 local function z2k_num(v, fallback)

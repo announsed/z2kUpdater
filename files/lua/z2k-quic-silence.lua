@@ -7,6 +7,9 @@ local WAIT_MS, MAX_MS = 5000, 15000
 -- имена оставлены намеренно — конфиг и lua едут разными файлами, и в окне
 -- обновления живой демон может держать ещё старый ключ.
 local POOLS = { quic = true, yt_quic = true, gv_quic = true }
+local V1_KINDS = { [0] = "initial", "zero", "handshake", "retry" }
+local V2_KINDS = { [0] = "retry", "initial", "zero", "handshake" }
+local SHORT_PKT = { kind = "short" }
 local serial = 0
 
 local function now_ms()
@@ -29,7 +32,7 @@ local function packet(p, offset, short_cid)
     if first < 128 then
         if not short_cid or #p - offset + 1 < 1 + #short_cid + 17 then return nil end
         if p:sub(offset + 1, offset + #short_cid) ~= short_cid then return nil end
-        return { kind = "short" }, #p + 1
+        return SHORT_PKT, #p + 1
     end
     if #p - offset + 1 < 7 then return nil end
     local version = p:byte(offset+1) * 16777216 + p:byte(offset+2) * 65536
@@ -48,9 +51,9 @@ local function packet(p, offset, short_cid)
         if #p - pos + 1 < 4 or (#p - pos + 1) % 4 ~= 0 then return nil end
         kind = "version"
     elseif version == 1 then
-        kind = ({[0]="initial", "zero", "handshake", "retry"})[math.floor(first / 16) % 4]
+        kind = V1_KINDS[math.floor(first / 16) % 4]
     elseif version == 0x6b3343cf then
-        kind = ({[0]="retry", "initial", "zero", "handshake"})[math.floor(first / 16) % 4]
+        kind = V2_KINDS[math.floor(first / 16) % 4]
     else
         return nil
     end

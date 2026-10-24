@@ -26,6 +26,8 @@ local state = {}            -- state[askey][hostn] = { strategy = N, ts = T }
 -- can lead disk during the debounce window) so the rotator's own in-RAM drift
 -- is never mistaken for an outside edit. See reconcile_external_edits().
 local last_written = {}     -- last_written[askey][hostn] = { strategy = N, ts = T }
+local last_raw_primary = nil
+local last_raw_fallback = nil
 local last_write = 0
 local write_interval = 2    -- seconds (debounce window for flash-friendly writes)
 
@@ -44,8 +46,9 @@ local function normalize_hostkey_for_state(hostkey)
   if hostkey == nil then return nil end
   local s = tostring(hostkey)
   if s == "" then return nil end
-  s = s:gsub("%.$", "")       -- strip trailing dot
-  return string.lower(s)
+  if s:byte(#s) == 46 then s = s:gsub("%.$", "") end -- strip trailing dot
+  if s:find("[A-Z]") then s = string.lower(s) end
+  return s
 end
 
 local function can_read_file(path)
@@ -101,12 +104,19 @@ local function choose_state_file_for_write()
   return nil
 end
 
--- Merge a TSV file's rows into dest (last-newer-ts wins per host).
-local function merge_state_file_into(path, dest)
-  if not path or not dest then return end
+local function read_file_raw(path)
+  if not path then return nil end
   local f = io.open(path, "r")
-  if not f then return end
-  for line in f:lines() do
+  if not f then return nil end
+  local body = f:read("*a")
+  f:close()
+  return body
+end
+
+-- Merge a TSV text's rows into dest (last-newer-ts wins per host).
+local function merge_state_text_into(body, dest)
+  if not body or not dest then return end
+  for line in body:gmatch("[^\r\n]+") do
     if line ~= "" and not line:match("^%s*#") then
       -- 5th column = mode (auto|frozen). Optional for backward compat: a legacy
       -- 4-column row parses mode="" → normalized to "auto" below.
@@ -130,7 +140,13 @@ local function merge_state_file_into(path, dest)
       end
     end
   end
-  f:close()
+end
+
+-- Merge a TSV file's rows into dest (last-newer-ts wins per host).
+local function merge_state_file_into(path, dest)
+  if not path or not dest then return end
+  local body = read_file_raw(path)
+  if body then merge_state_text_into(body, dest) end
 end
 
 -- Shallow {askey -> hostn -> {strategy,ts}} copy keeping only persisted fields.
@@ -155,8 +171,12 @@ local function load_state()
   state = {}
   local path = choose_state_file_for_read()
   if not path then return end
-  merge_state_file_into(STATE_FILE_PRIMARY, state)
-  merge_state_file_into(STATE_FILE_FALLBACK, state)
+  local raw_p = read_file_raw(STATE_FILE_PRIMARY)
+  local raw_f = read_file_raw(STATE_FILE_FALLBACK)
+  if raw_p then merge_state_text_into(raw_p, state) end
+  if raw_f then merge_state_text_into(raw_f, state) end
+  last_raw_primary = raw_p
+  last_raw_fallback = raw_f
   -- Prime the external-edit baseline from the disk we just loaded. Without this
   -- `last_written` starts empty and the first reconcile would treat EVERY disk
   -- row as an outside edit (re-adopting it / rewinding any in-RAM drift that
@@ -288,12 +308,19 @@ local function write_state()
     end
   end
   f:close()
-  if not os.rename(tmp, path) then
+  local renamed = os.rename(tmp, path)
+  if not renamed then
+    os.remove(path)
+    renamed = os.rename(tmp, path)
+  end
+  if not renamed then
     os.remove(tmp)
   else
     -- Record exactly what is now on disk, so the external-edit reconcile can
     -- tell OUR own writes apart from outside edits (webpanel × / manual edit).
     last_written = snapshot_strategies(merged)
+    last_raw_primary = nil
+    last_raw_fallback = nil
   end
   release_lock(lockfile)
 end
@@ -525,12 +552,16 @@ local function reconcile_external_edits(force)
   -- turning reconcile into a mass-reset loop. If NEITHER file is readable we
   -- bail — an I/O failure must never be mistaken for "the operator deleted
   -- everything".
-  local p_ok = can_read_file(STATE_FILE_PRIMARY)
-  local f_ok = can_read_file(STATE_FILE_FALLBACK)
-  if not (p_ok or f_ok) then return end
+  local raw_p = read_file_raw(STATE_FILE_PRIMARY)
+  local raw_f = read_file_raw(STATE_FILE_FALLBACK)
+  if not (raw_p or raw_f) then return end
+  if (last_raw_primary ~= nil or last_raw_fallback ~= nil)
+     and raw_p == last_raw_primary and raw_f == last_raw_fallback then
+    return
+  end
   local disk = {}
-  if p_ok then merge_state_file_into(STATE_FILE_PRIMARY, disk) end
-  if f_ok then merge_state_file_into(STATE_FILE_FALLBACK, disk) end
+  if raw_p then merge_state_text_into(raw_p, disk) end
+  if raw_f then merge_state_text_into(raw_f, disk) end
 
   -- (1) External DELETE — present at our last write, gone from disk now → the
   --     operator removed it (×) → reset its live rotation to strategy 1 and drop
@@ -565,6 +596,8 @@ local function reconcile_external_edits(force)
 
   -- Adopt disk as the new baseline.
   last_written = snapshot_strategies(disk)
+  last_raw_primary = raw_p
+  last_raw_fallback = raw_f
 end
 
 local function apply_pin(askey, hostn, hrec)
@@ -578,6 +611,127 @@ local function apply_pin(askey, hostn, hrec)
   end
 end
 
+local function pre_circular_pin(askey_before, hostn_before, hrec_before)
+  apply_pin(askey_before, hostn_before, hrec_before)
+  if hrec_before and not hrec_before.on_strategy_changed then
+    hrec_before.on_strategy_changed = function(rec)
+      persist_if_changed(askey_before, hostn_before, rec)
+    end
+    hrec_before.before_async_result = function(rec)
+      -- No packet may arrive between an operator pin and a QUIC timeout.
+      reconcile_external_edits(true)
+      apply_pin(askey_before, hostn_before, rec)
+    end
+  end
+end
+
+local function post_circular_persist(desync, askey_before, hostn_before, hrec_before, nstrategy_before_circular)
+  local askey = askey_before
+  local hostn = hostn_before
+  local hrec = hrec_before
+  if not askey or not hostn or not hrec or not hrec.nstrategy then
+    local ok_after, askey_after, hostn_after, hrec_after = pcall(get_record_for_desync, desync, false)
+    if ok_after then
+      -- Stay bound to circular()'s host record (askey_before); askey_after may
+      -- point at an executed instance (e.g. fake_1_2), not the circular state.
+      askey = askey or askey_after
+      hostn = hostn or hostn_after
+      if (not hrec or not hrec.nstrategy) and hrec_after and hrec_after.nstrategy then
+        hrec = hrec_after
+      elseif not hrec then
+        hrec = hrec_after
+      end
+    end
+  end
+  if not hrec then return end
+
+  -- SEED-RECOVERY (display-truth invariant). If the pre-circular seed
+  -- missed for this host (nstrategy_before_circular == nil — e.g. the first
+  -- real packet created the record only now, or load_state lost the race)
+  -- circular fell back to its default nstrategy=1 (zapret-auto.lua) while
+  -- disk still holds the real pinned/persisted value. Without this, that
+  -- cosmetic 1 then gets persisted over the truth and the display lies.
+  -- Detect exactly that signature and ADOPT the persisted value into live so
+  -- disk and live converge on the SAME real strategy on this very packet.
+  -- STRICT exact key (state[askey][hostn], hostn carries |4/|6) — never
+  -- cross-adopt a sibling address family (would break family-split / r-49).
+  -- A webpanel × delete clears the disk row first, so there is no N!=1 row
+  -- to recover from → a genuine reset to 1 is never resurrected.
+  local seed_recovered = false
+  if nstrategy_before_circular == nil and tonumber(hrec.nstrategy) == 1
+     and askey and hostn then
+    local rec = state[askey] and state[askey][hostn]
+    -- The in-RAM `state` can lag the truth: a pin written AFTER load_state
+    -- ran, or arriving inside the reconcile debounce window, is on DISK but
+    -- not yet in `state`. Read disk DIRECTLY (only in this rare recovery
+    -- path — a fresh record that circular defaulted to 1) so the pin is
+    -- honored before the default-1 persist below can clobber it. Same
+    -- merged primary+fallback view load_state/reconcile use.
+    if not (rec and tonumber(rec.strategy)) then
+      local disk = {}
+      if can_read_file(STATE_FILE_PRIMARY) then merge_state_file_into(STATE_FILE_PRIMARY, disk) end
+      if can_read_file(STATE_FILE_FALLBACK) then merge_state_file_into(STATE_FILE_FALLBACK, disk) end
+      rec = disk[askey] and disk[askey][hostn]
+    end
+    if rec and tonumber(rec.strategy) and tonumber(rec.strategy) ~= 1 then
+      hrec.nstrategy = tonumber(rec.strategy)
+      seed_recovered = true
+    end
+  end
+
+  local nocheck_after, failure_after, neutral_after, server_active_after =
+    conn_record_flags(desync)
+  local n_after = tonumber(hrec.nstrategy) or nil
+
+  -- Config changed (fewer strategies than persisted): normalize to 1 and
+  -- drop the now-invalid persisted entry.
+  local ct = tonumber(hrec.ctstrategy) or nil
+  if ct and ct > 0 and n_after and (n_after < 1 or n_after > ct) then
+    hrec.nstrategy = 1
+    clear_persisted(askey, hostn)
+    return
+  end
+
+  -- Known-good gating (legacy state core). A server-active rejection
+  -- (TCP refused / TLS alert post-SH / bare 451 / WAF) must NEVER pin —
+  -- the peer actively refused, a packet-level bypass cannot help; it has
+  -- priority over every success state (nocheck may be latched from an
+  -- earlier ServerHello, then a fatal alert arrives in this callback).
+  local server_active_event = server_active_after
+  local successful_state = nocheck_after and (not failure_after)
+    and (not neutral_after) and (not server_active_event)
+  local response_state = has_positive_incoming_response(desync)
+    and (not failure_after) and (not neutral_after) and (not server_active_event)
+  -- QUIC flows may not reliably trigger the success detector, but
+  -- nstrategy>1 already means circular rotated this host — persist that
+  -- candidate for QUIC keys.
+  local quic_candidate_state =
+    is_quic_key(askey) and (desync and desync.l7payload == "quic_initial")
+    and (not failure_after) and (not server_active_event)
+    and n_after and n_after > 1
+  -- Broad fallback so default-1 / hard-to-observe profiles still show.
+  local outgoing_initial = desync and desync.outgoing and n_after and
+    (desync.l7payload == "tls_client_hello" or
+     desync.l7payload == "quic_initial" or
+     desync.l7payload == "http_req")
+  local success_event = successful_state or response_state or quic_candidate_state
+
+  -- Rotation belongs exclusively to circular. Persistence never rolls
+  -- back a decision based on unrelated/recent successful connections.
+
+  -- (Freeze enforcement moved to the pre-circular FREEZE CLAMP at the top of
+  -- this wrapper: hrec.final makes the engine itself refuse to rotate a frozen
+  -- host — instead of this post-hoc force-back that only masked the display
+  -- while the rotated strategy already executed on the wire. The persisted
+  -- mode="frozen" column still survives restarts/reboot/auto-update.)
+
+  -- Persist the (possibly reverted) strategy. Confirmed success OR the
+  -- outgoing-initial fallback triggers a save; server-active never pins.
+  if (success_event or outgoing_initial or seed_recovered) and not server_active_event then
+    persist_if_changed(askey, hostn, hrec)
+  end
+end
+
 -- ---------------------------------------------------------------------------
 -- wrap circular() — persistence + explicit operator reconciliation.
 -- No automatic success-based override of circular's result.
@@ -588,28 +742,15 @@ if type(circular) == "function" then
     local askey_before, hostn_before, hrec_before
     local nstrategy_before_circular   -- used for initial seed recovery
     -- pre-block errors stay swallowed: never break the nfqws desync path.
-    pcall(function()
-      askey_before, hostn_before, hrec_before = get_record_for_desync(desync, true)
-    end)
+    local ok_pre, a_b, h_b, r_b = pcall(get_record_for_desync, desync, true)
+    if ok_pre then askey_before, hostn_before, hrec_before = a_b, h_b, r_b end
 
     -- Apply external state.tsv edits (webpanel × / manual) to the live autostate
     -- BEFORE the rotator runs, so an operator reset takes effect this packet
     -- (debounced internally). Errors swallowed — must never break the desync.
     pcall(reconcile_external_edits)
 
-    pcall(function()
-      apply_pin(askey_before, hostn_before, hrec_before)
-      if hrec_before and not hrec_before.on_strategy_changed then
-        hrec_before.on_strategy_changed = function(rec)
-          persist_if_changed(askey_before, hostn_before, rec)
-        end
-        hrec_before.before_async_result = function(rec)
-          -- No packet may arrive between an operator pin and a QUIC timeout.
-          reconcile_external_edits(true)
-          apply_pin(askey_before, hostn_before, rec)
-        end
-      end
-    end)
+    pcall(pre_circular_pin, askey_before, hostn_before, hrec_before)
 
     -- Remember whether this host was seeded before circular ran.
     if hrec_before then
@@ -622,109 +763,7 @@ if type(circular) == "function" then
     if ok then
       verdict = verdict_or_err
       -- post-block errors stay swallowed (persist accounting must never throw).
-      pcall(function()
-        local askey_after, hostn_after, hrec_after
-        pcall(function()
-          askey_after, hostn_after, hrec_after = get_record_for_desync(desync, false)
-        end)
-        -- Stay bound to circular()'s host record (askey_before); askey_after may
-        -- point at an executed instance (e.g. fake_1_2), not the circular state.
-        local askey = askey_before or askey_after
-        local hostn = hostn_before or hostn_after
-        local hrec = hrec_before
-        if (not hrec or not hrec.nstrategy) and hrec_after and hrec_after.nstrategy then
-          hrec = hrec_after
-        elseif not hrec then
-          hrec = hrec_after
-        end
-        if not hrec then return end
-
-        -- SEED-RECOVERY (display-truth invariant). If the pre-circular seed
-        -- missed for this host (nstrategy_before_circular == nil — e.g. the first
-        -- real packet created the record only now, or load_state lost the race)
-        -- circular fell back to its default nstrategy=1 (zapret-auto.lua) while
-        -- disk still holds the real pinned/persisted value. Without this, that
-        -- cosmetic 1 then gets persisted over the truth and the display lies.
-        -- Detect exactly that signature and ADOPT the persisted value into live so
-        -- disk and live converge on the SAME real strategy on this very packet.
-        -- STRICT exact key (state[askey][hostn], hostn carries |4/|6) — never
-        -- cross-adopt a sibling address family (would break family-split / r-49).
-        -- A webpanel × delete clears the disk row first, so there is no N!=1 row
-        -- to recover from → a genuine reset to 1 is never resurrected.
-        local seed_recovered = false
-        if nstrategy_before_circular == nil and tonumber(hrec.nstrategy) == 1
-           and askey and hostn then
-          local rec = state[askey] and state[askey][hostn]
-          -- The in-RAM `state` can lag the truth: a pin written AFTER load_state
-          -- ran, or arriving inside the reconcile debounce window, is on DISK but
-          -- not yet in `state`. Read disk DIRECTLY (only in this rare recovery
-          -- path — a fresh record that circular defaulted to 1) so the pin is
-          -- honored before the default-1 persist below can clobber it. Same
-          -- merged primary+fallback view load_state/reconcile use.
-          if not (rec and tonumber(rec.strategy)) then
-            local disk = {}
-            if can_read_file(STATE_FILE_PRIMARY) then merge_state_file_into(STATE_FILE_PRIMARY, disk) end
-            if can_read_file(STATE_FILE_FALLBACK) then merge_state_file_into(STATE_FILE_FALLBACK, disk) end
-            rec = disk[askey] and disk[askey][hostn]
-          end
-          if rec and tonumber(rec.strategy) and tonumber(rec.strategy) ~= 1 then
-            hrec.nstrategy = tonumber(rec.strategy)
-            seed_recovered = true
-          end
-        end
-
-        local nocheck_after, failure_after, neutral_after, server_active_after =
-          conn_record_flags(desync)
-        local n_after = tonumber(hrec.nstrategy) or nil
-
-        -- Config changed (fewer strategies than persisted): normalize to 1 and
-        -- drop the now-invalid persisted entry.
-        local ct = tonumber(hrec.ctstrategy) or nil
-        if ct and ct > 0 and n_after and (n_after < 1 or n_after > ct) then
-          hrec.nstrategy = 1
-          clear_persisted(askey, hostn)
-          return
-        end
-
-        -- Known-good gating (legacy state core). A server-active rejection
-        -- (TCP refused / TLS alert post-SH / bare 451 / WAF) must NEVER pin —
-        -- the peer actively refused, a packet-level bypass cannot help; it has
-        -- priority over every success state (nocheck may be latched from an
-        -- earlier ServerHello, then a fatal alert arrives in this callback).
-        local server_active_event = server_active_after
-        local successful_state = nocheck_after and (not failure_after)
-          and (not neutral_after) and (not server_active_event)
-        local response_state = has_positive_incoming_response(desync)
-          and (not failure_after) and (not neutral_after) and (not server_active_event)
-        -- QUIC flows may not reliably trigger the success detector, but
-        -- nstrategy>1 already means circular rotated this host — persist that
-        -- candidate for QUIC keys.
-        local quic_candidate_state =
-          is_quic_key(askey) and (desync and desync.l7payload == "quic_initial")
-          and (not failure_after) and (not server_active_event)
-          and n_after and n_after > 1
-        -- Broad fallback so default-1 / hard-to-observe profiles still show.
-        local outgoing_initial = desync and desync.outgoing and n_after and
-          (desync.l7payload == "tls_client_hello" or
-           desync.l7payload == "quic_initial" or
-           desync.l7payload == "http_req")
-        local success_event = successful_state or response_state or quic_candidate_state
-
-        -- Rotation belongs exclusively to circular. Persistence never rolls
-        -- back a decision based on unrelated/recent successful connections.
-
-        -- (Freeze enforcement moved to the pre-circular FREEZE CLAMP at the top of
-        -- this wrapper: hrec.final makes the engine itself refuse to rotate a frozen
-        -- host — instead of this post-hoc force-back that only masked the display
-        -- while the rotated strategy already executed on the wire. The persisted
-        -- mode="frozen" column still survives restarts/reboot/auto-update.)
-
-        -- Persist the (possibly reverted) strategy. Confirmed success OR the
-        -- outgoing-initial fallback triggers a save; server-active never pins.
-        if (success_event or outgoing_initial or seed_recovered) and not server_active_event then
-          persist_if_changed(askey, hostn, hrec)
-        end
-      end)
+      pcall(post_circular_persist, desync, askey_before, hostn_before, hrec_before, nstrategy_before_circular)
     end
 
     if not ok then error(verdict_or_err, 0) end
@@ -744,5 +783,5 @@ z2k_state_persist = {
   state_file = function() return STATE_FILE_PRIMARY end,
   _state = function() return state end,
   _set_interval = function(n) write_interval = tonumber(n) or write_interval end,
-  _reset = function() if type(timer_del) == "function" then timer_del("z2k_state_flush") end; flush_pending = false; loaded = false; state = {}; last_write = 0; last_written = {}; last_reconcile = 0 end,
+  _reset = function() if type(timer_del) == "function" then timer_del("z2k_state_flush") end; flush_pending = false; loaded = false; state = {}; last_write = 0; last_written = {}; last_raw_primary = nil; last_raw_fallback = nil; last_reconcile = 0 end,
 }

@@ -114,10 +114,29 @@ fastnat_reassert() {
 }
 fastnat_reassert
 
+# Значение из конфига без кавычек (последнее присваивание побеждает, как при сорсинге).
+cfg_val() {
+    local _k="$1" _line _v="" _rest
+    [ -r "$ZAPRET_CONFIG" ] || return 0
+    while IFS= read -r _line || [ -n "$_line" ]; do
+        case "$_line" in
+            "$_k="*) _v="${_line#"$_k="}" ;;
+        esac
+    done < "$ZAPRET_CONFIG"
+    while :; do
+        case "$_v" in
+            *\"*) _rest="${_v#*\"}"; _v="${_v%%\"*}$_rest" ;;
+            *\'*) _rest="${_v#*\'}"; _v="${_v%%\'*}$_rest" ;;
+            *) break ;;
+        esac
+    done
+    [ -n "$_v" ] && printf '%s\n' "$_v"
+}
+
 # Use exactly the same main-table discovery as start_fw.
 # shellcheck source=lib/wan.sh
 . "${Z2K_WAN_LIB:-/opt/zapret2/lib/wan.sh}"
-wan_iface="$(sed -n 's/^WAN_IFACE=//p' "$ZAPRET_CONFIG" 2>/dev/null | tail -n 1 | tr -d "\"'")"
+wan_iface="$(cfg_val WAN_IFACE)"
 
 # A family (v4/v6) is BROKEN == its NFQUEUE rules are gone WHILE ITS WAN IS UP.
 # The WAN gate is essential and per-family: a family with no WAN legitimately has
@@ -173,9 +192,13 @@ nfq_missing() {   # $1 = iptables|ip6tables ; $2 = -4|-6
     # PKT_IN, а пустой PKT_IN берёт значение PKT_OUT (так же в S99zapret2). Чего
     # конфиг не требует, того и не ждём — иначе вечный re-apply на законно
     # урезанном наборе.
+    local _chains_tcp _chains_udp _chains
+    _chains_tcp="$(nfq_expected_chains tcp)"
+    _chains_udp="$(nfq_expected_chains udp)"
     for _iface in $_wan; do
         for _p in tcp udp; do
-            for _c in $(nfq_expected_chains "$_p"); do
+            case "$_p" in tcp) _chains="$_chains_tcp" ;; udp) _chains="$_chains_udp" ;; esac
+            for _c in $_chains; do
                 case "$_c" in POSTROUTING) _dir=-o ;; *) _dir=-i ;; esac
                 if printf '%s\n' "$_dump" | awk -v c="$_c" -v p="$_p" -v d="$_dir" -v iface="$_iface" '
                     $1=="-A" && $2==c {
@@ -197,17 +220,16 @@ nfq_missing() {   # $1 = iptables|ip6tables ; $2 = -4|-6
     return 1
 }
 
-# Значение из конфига без кавычек (последнее присваивание побеждает, как при сорсинге).
-cfg_val() {
-    sed -n "s/^$1=//p" "$ZAPRET_CONFIG" 2>/dev/null | tail -n 1 | tr -d "\"'"
-}
-
 # Цепочки, в которых конфиг требует NFQUEUE-правило для протокола $1.
 # NFQWS2_ENABLE=0 — движок правил не ставит вовсе, ждать нечего.
 nfq_expected_chains() {
     local _up _ports _out _in
     [ "$(cfg_val NFQWS2_ENABLE)" = "0" ] && return 0
-    _up=$(printf '%s' "$1" | tr 'a-z' 'A-Z')
+    case "$1" in
+        tcp) _up=TCP ;;
+        udp) _up=UDP ;;
+        *)   _up=$(printf '%s' "$1" | tr 'a-z' 'A-Z') ;;
+    esac
     _ports=$(cfg_val "NFQWS2_PORTS_${_up}")
     [ -n "$_ports" ] || return 0
     _out=$(cfg_val "NFQWS2_${_up}_PKT_OUT")
