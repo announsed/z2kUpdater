@@ -151,9 +151,12 @@ rotate_all_logs() {
 
 # $1 state file, $2 key
 last_fired_in() {
-    local file="$1" key="$2"
+    local file="$1" key="$2" _k _v _res=""
     [ -f "$file" ] || return
-    awk -F= -v k="$key" '$1==k {print $2}' "$file" | tail -1
+    while IFS='=' read -r _k _v || [ -n "$_k" ]; do
+        [ "$_k" = "$key" ] && _res="$_v"
+    done < "$file"
+    [ -n "$_res" ] && printf '%s\n' "$_res"
 }
 
 # $1 state file, $2 key, $3 value
@@ -336,9 +339,9 @@ while true; do
         log "файл планировщика обновлён — перехожу на новый код"
         exec sh "$_self"
     fi
-    hhmm=$(date +%H:%M)
-    today=$(date +%Y-%m-%d)
-    now_epoch=$(date +%s)
+    read -r hhmm today now_epoch now_sec <<EOF
+$(date '+%H:%M %Y-%m-%d %s %S')
+EOF
 
     # Автообновление — в час, выбранный человеком в панели, а не в зашитые
     # 02:00. Стоит ДО общего case, чтобы ветка `*:00` не перехватила задачу.
@@ -501,10 +504,11 @@ while true; do
     fi
 
     # Rotate logs occasionally (cheap, only every minute boundary).
-    if [ "$(date +%S)" -lt 30 ]; then
+    case "$now_sec" in [0-2][0-9])
         rotate_log
         rotate_all_logs
-    fi
+        ;;
+    esac
 
     sleep 30
 done

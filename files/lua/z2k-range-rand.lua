@@ -34,7 +34,7 @@ local z2k_rr_keys_signed = { "tcp_seq", "tcp_ts" }
 -- Parse "a-b" → (a, b) integers, or nil if not a valid pure range.
 -- Only accepts unsigned integers for positive-only keys.
 local function parse_range_pos(v)
-  if type(v) ~= "string" then return nil end
+  if type(v) ~= "string" or not v:find("-", 2, true) then return nil end
   local a, b = v:match("^(%d+)%-(%d+)$")
   if not a then return nil end
   a, b = tonumber(a), tonumber(b)
@@ -46,7 +46,7 @@ end
 -- Accepts leading minus on either side. Never matches a single-value literal
 -- like "-1000" (which is a scalar, not a range).
 local function parse_range_signed(v)
-  if type(v) ~= "string" then return nil end
+  if type(v) ~= "string" or not v:find("-", 2, true) then return nil end
   local a, b = v:match("^(%-?%d+)%-(%-?%d+)$")
   if not a then return nil end
   a, b = tonumber(a), tonumber(b)

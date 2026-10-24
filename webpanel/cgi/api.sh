@@ -257,27 +257,17 @@ case "$method $path" in
         installed=$(is_installed && echo true || echo false)
         running=$(is_running   && echo true || echo false)
         svc_state=$(service_status_string "$running" "$installed")
-        disable_cd=$(read_flag "DISABLE_CUSTOM" "$CONFIG_FILE" "1")
+        load_status_flags "$CONFIG_FILE"
         # UI wants positive "customd_enabled"
         if [ "$disable_cd" = "0" ]; then customd="1"; else customd="0"; fi
-        category_youtube=$(read_flag "Z2K_CATEGORY_YOUTUBE" "$CONFIG_FILE" "1")
-        category_rkn=$(read_flag "Z2K_CATEGORY_RKN" "$CONFIG_FILE" "1")
-        category_discord_voice=$(read_flag "Z2K_CATEGORY_DISCORD_VOICE" "$CONFIG_FILE" "1")
-        dynamic_ttl=$(read_flag "Z2K_DYNAMIC_TTL" "$CONFIG_FILE" "1")
-        ppe=$(read_flag "Z2K_PPE_DEOFFLOAD" "$CONFIG_FILE" "1")
         fastroute_snapshot "$running"
-        auto_update=$(read_flag "Z2K_AUTO_UPDATE_ENABLED" "$CONFIG_FILE" "1")
         # Час ночного обновления. Нормализуем здесь, а не в панели: конфиг
         # правят и руками, а селектор без совпадающего варианта показал бы
         # пустоту вместо времени, которое на самом деле сработает (02:00).
-        au_hour=$(read_flag "Z2K_AU_HOUR" "$CONFIG_FILE" "02")
         case "$au_hour" in [01][0-9]|2[0-3]) ;; *) au_hour=02 ;; esac
-        autohostlist=$(read_flag "Z2K_AUTOHOSTLIST" "$CONFIG_FILE" "0")
         tpid=$(tunnel_pid 2>/dev/null)
         tunnel_running=false
         [ -n "$tpid" ] && tunnel_running=true
-
-        game_warp=$(read_flag "GAME_WARP_ENABLED" "$CONFIG_FILE" "0")
         json_header
         # Каждое значение флага — через json_string, а не прямым %s. Это
         # сохраняет валидность JSON, даже если конфиг правили вручную.

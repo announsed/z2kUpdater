@@ -2646,22 +2646,25 @@ stop_fw()
 # read is required; unknown or empty state is never grounds for deletion.
 z2k_sweep_stale_wan_nfqueue()
 {
-    local qn="${QNUM:-200}" save restore fam rule dev selected chain dir
+    local qn="${QNUM:-200}" save restore fam rule dev selected
     for fam in 4 6; do
         selected=$(z2k_wan_ifaces "-$fam" "${WAN_IFACE:-}") || continue
         [ -n "$selected" ] || continue
         if [ "$fam" = 4 ]; then save=iptables-save; restore=iptables; else save=ip6tables-save; restore=ip6tables; fi
         command -v "$save" >/dev/null 2>&1 || continue
         "$save" -t mangle 2>/dev/null | awk -v q="$qn" '
-            $1=="-A" {for(i=1;i<NF;i++) if($i=="--queue-num" && $(i+1)==q) {print; break}}
-        ' | while IFS= read -r rule; do
-            chain=$(printf '%s\n' "$rule" | awk '{print $2}')
-            case "$chain" in
-                POSTROUTING) dir=-o ;;
-                INPUT|FORWARD) dir=-i ;;
-                *) continue ;;
-            esac
-            dev=$(printf '%s\n' "$rule" | awk -v d="$dir" '{for(i=3;i<NF;i++) if($i==d) {print $(i+1); exit}}')
+            $1=="-A" {
+                has_q=0
+                for(i=1;i<NF;i++) if($i=="--queue-num" && $(i+1)==q) {has_q=1; break}
+                if(!has_q) next
+                if($2=="POSTROUTING") d="-o"
+                else if($2=="INPUT" || $2=="FORWARD") d="-i"
+                else next
+                dev=""
+                for(i=3;i<NF;i++) if($i==d) {dev=$(i+1); break}
+                if(dev!="") print dev "\t" $0
+            }
+        ' | while IFS="$(printf '\t')" read -r dev rule; do
             [ -n "$dev" ] || continue
             case " $selected " in *" $dev "*) continue ;; esac
             # Rule text originates from iptables-save, not user input.

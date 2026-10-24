@@ -56,6 +56,32 @@ check(z2k_nohost_key({}) == "nohost",
 check(z2k_nohost_key(nil) == "nohost",
       "nil desync → 'nohost' (no crash)")
 
+-- z2k_service_hostkey: passes nld="2" to standard_hostkey in-place without
+-- mutating caller's desync.arg after return or crashing on nil desync/arg.
+do
+  local seen_nld, seen_same_tbl
+  local orig_shk = standard_hostkey
+  function standard_hostkey(d)
+    seen_nld = d and d.arg and d.arg.nld
+    seen_same_tbl = d
+    return "example.com"
+  end
+  local d1 = { arg = { key = "rkn_tcp", nld = "3" }, track = { hostname = "a.b.example.com" } }
+  local res1 = z2k_service_hostkey(d1)
+  check(res1 == "example.com" and seen_nld == "2" and seen_same_tbl == d1,
+        "z2k_service_hostkey passes desync in-place with arg.nld='2'")
+  check(d1.arg.nld == "3" and d1.arg.key == "rkn_tcp",
+        "z2k_service_hostkey restores original arg.nld after return")
+
+  local d2 = { track = { hostname = "a.b.example.com" } }
+  local res2 = z2k_service_hostkey(d2)
+  check(res2 == "example.com" and seen_nld == "2" and d2.arg == nil,
+        "z2k_service_hostkey handles nil desync.arg and restores nil")
+  check(z2k_service_hostkey(nil) == nil,
+        "z2k_service_hostkey(nil) → nil (no crash)")
+  standard_hostkey = orig_shk
+end
+
 print()
 print(string.format("Tests passed: %d / %d", PASS, PASS + FAIL))
 if FAIL > 0 then
