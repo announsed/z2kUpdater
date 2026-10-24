@@ -130,7 +130,30 @@ do
     restore = load_with({ Z2K_TCP16_ASN = asnf, Z2K_TCP16_NETS = netf, Z2K_TCP16_SNI = snif })
     is("без карты имён работает общее закрепление", "общее", z2k_sni_for(v4(91, 98), "общее"))
     restore()
-    os.remove(asnf); os.remove(netf)
+
+    -- Ночной перемер (03:30) и проба обновляют tcp16_sni.txt / tcp16_asn.txt
+    -- без рестарта nfqws2, когда флаг Z2K_TCP16_ENABLED не менялся. Рантайм
+    -- обязан подхватить новые имена после истечения Z2K_MAP_RECHECK, а при
+    -- живой карте — не дёргать файл ручного закрепления на каждом пакете.
+    f = io.open(snif, "w"); f:write("24940\t300.ya.ru\n"); f:close()
+    local pin_calls = 0
+    restore = load_with({ Z2K_TCP16_ASN = asnf, Z2K_TCP16_NETS = netf, Z2K_TCP16_SNI = snif, Z2K_MAP_RECHECK = "60" })
+    local real_pinned = z2k_sni_pinned
+    z2k_sni_pinned = function() pin_calls = pin_calls + 1; return real_pinned() end
+    local dp = v4(91, 98); dp.dis.payload = "HELLO-PKT"
+    z2k_sni_pick(nil, dp)
+    is("при живой карте z2k_sni_pick не читает ручное закрепление", 0, pin_calls)
+    is("до перемера Hetzner получает прежнее имя", "300.ya.ru", z2k_sni_for(v4(91, 98)))
+
+    f = io.open(snif, "w"); f:write("24940\tmax.ru\n16509\thcaptcha.com\n"); f:close()
+    f = io.open(asnf, "w"); f:write("24940\n16509\n"); f:close()
+    FAKE_NOW = FAKE_NOW + 61
+    is("после ночного перемера протухшее имя обновилось без рестарта демона", "max.ru", z2k_sni_for(v4(91, 98)))
+    is("новая AS из перемера тоже подхвачена без рестарта демона", "hcaptcha.com", z2k_sni_for(v4(52, 94)))
+    z2k_sni_pinned = real_pinned
+    restore()
+
+    os.remove(asnf); os.remove(netf); os.remove(snif)
 end
 
 -- ----- файл не даёт ничего лишнего --------------------------------------------

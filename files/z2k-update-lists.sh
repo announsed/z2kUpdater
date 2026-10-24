@@ -52,6 +52,38 @@ Z2K_VPS_GH_IP="${Z2K_VPS_GH_IP:-85.192.60.175}"
 Z2K_FETCH_VPS_CONNECT_TIMEOUT="${Z2K_FETCH_VPS_CONNECT_TIMEOUT:-8}"
 Z2K_FETCH_VPS_TRIES="${Z2K_FETCH_VPS_TRIES:-2}"
 
+if ! command -v z2k_host_jitter >/dev/null 2>&1; then
+z2k_host_jitter() {
+    local max="${1:-3600}" host hex j
+    case "$max" in ''|*[!0-9]*) max=3600 ;; esac
+    [ "$max" -gt 0 ] || max=3600
+    host=$(hostname 2>/dev/null)
+    [ -n "$host" ] || host=$(cat /proc/sys/kernel/hostname 2>/dev/null)
+    host="${host}$(cat /sys/class/net/*/address 2>/dev/null | head -1)"
+    hex=""
+    if command -v md5sum >/dev/null 2>&1; then
+        hex=$(printf '%s' "$host" | md5sum 2>/dev/null | cut -c1-6)
+    fi
+    case "$hex" in
+        [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+        *) hex="" ;;
+    esac
+    if [ -z "$hex" ] && command -v sha256sum >/dev/null 2>&1; then
+        hex=$(printf '%s' "$host" | sha256sum 2>/dev/null | cut -c1-6)
+        case "$hex" in
+            [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+            *) hex="" ;;
+        esac
+    fi
+    j=""
+    [ -n "$hex" ] && j=$(( 0x$hex % max )) 2>/dev/null
+    case "$j" in
+        ''|*[!0-9]*) j=$(( ($$ + $(date +%s 2>/dev/null || echo 1)) % max )) ;;
+    esac
+    echo "$j"
+}
+fi
+
 _z2k_vps_gh_resolve() {
     [ -n "${Z2K_VPS_GH_IP:-}" ] || return 0
     # Извлечь реальный host (между :// и первым /), чтобы жадный glob не
@@ -803,20 +835,26 @@ main() {
     # as first-install fallback via lib/install.sh step_download_domain_lists.
     if [ -x "${ZAPRET2_DIR}/z2k-geosite.sh" ]; then
         log_msg "Running z2k-geosite fetch (runetfreedom)..."
-        if sh "${ZAPRET2_DIR}/z2k-geosite.sh" fetch >>"$LOG_FILE" 2>&1; then
+        _geo_out="/tmp/z2k-geosite-run.$$"
+        if sh "${ZAPRET2_DIR}/z2k-geosite.sh" fetch >"$_geo_out" 2>&1; then
+            cat "$_geo_out" >>"$LOG_FILE" 2>/dev/null
             # z2k-geosite handles atomic rename + service-safe writes;
             # count a change whenever at least one asset was applied.
-            # ETag cache makes 304-only runs a no-op, so we approximate
-            # "something changed" by checking log for "applied" markers.
-            if tail -30 "$LOG_FILE" | grep -q ': applied,'; then
+            # ETag cache makes 304-only runs a no-op, so we check only THIS
+            # run's output for "applied" markers (tail -30 on the persistent
+            # 200-line log saw ": applied," from previous nights and triggered
+            # an unnecessary S99zapret2 restart on every 304 night).
+            if grep -q ': applied,' "$_geo_out" 2>/dev/null; then
                 changes=$((changes + 1))
                 log_msg "geosite: applied changes detected"
             else
                 log_msg "geosite: all assets unchanged (ETag match)"
             fi
         else
+            cat "$_geo_out" >>"$LOG_FILE" 2>/dev/null
             log_msg "WARN: geosite fetch partial/failed"
         fi
+        rm -f "$_geo_out" 2>/dev/null
     else
         log_msg "z2k-geosite.sh missing, skipping list refresh"
     fi

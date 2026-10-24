@@ -120,8 +120,9 @@ log() {
 # $1 - log path (defaults to the scheduler's own $LOG)
 rotate_log() {
     local f="${1:-$LOG}"
+    [ ! -L "$f" ] || { rm -f "$f" 2>/dev/null; return; }
     [ -f "$f" ] || return
-    local lines
+    local lines tmp
     lines=$(wc -l < "$f" 2>/dev/null)
     if [ "${lines:-0}" -gt 1000 ]; then
         # TRUNCATE IN PLACE, never mv. `mv` replaces the inode, and a daemon holding the
@@ -129,8 +130,9 @@ rotate_log() {
         # forever while the file on disk looks fine. That is exactly what happened to the
         # usque engine log: field reports were read from a file the engine had stopped
         # writing to days earlier, and every conclusion drawn from them was unsound.
-        tail -800 "$f" > "${f}.tmp" 2>/dev/null && cat "${f}.tmp" > "$f" 2>/dev/null
-        rm -f "${f}.tmp" 2>/dev/null
+        tmp=$(mktemp "${f}.XXXXXX" 2>/dev/null) || return
+        tail -800 "$f" > "$tmp" 2>/dev/null && cat "$tmp" > "$f" 2>/dev/null
+        rm -f "$tmp" 2>/dev/null
     fi
 }
 
@@ -151,9 +153,12 @@ rotate_all_logs() {
 
 # $1 state file, $2 key
 last_fired_in() {
-    local file="$1" key="$2"
+    local file="$1" key="$2" _k _v _res=""
     [ -f "$file" ] || return
-    awk -F= -v k="$key" '$1==k {print $2}' "$file" | tail -1
+    while IFS='=' read -r _k _v || [ -n "$_k" ]; do
+        [ "$_k" = "$key" ] && _res="$_v"
+    done < "$file"
+    [ -n "$_res" ] && printf '%s\n' "$_res"
 }
 
 # $1 state file, $2 key, $3 value
@@ -336,9 +341,9 @@ while true; do
         log "файл планировщика обновлён — перехожу на новый код"
         exec sh "$_self"
     fi
-    hhmm=$(date +%H:%M)
-    today=$(date +%Y-%m-%d)
-    now_epoch=$(date +%s)
+    read -r hhmm today now_epoch now_sec <<EOF
+$(date '+%H:%M %Y-%m-%d %s %S')
+EOF
 
     # Автообновление — в час, выбранный человеком в панели, а не в зашитые
     # 02:00. Стоит ДО общего case, чтобы ветка `*:00` не перехватила задачу.
@@ -501,10 +506,11 @@ while true; do
     fi
 
     # Rotate logs occasionally (cheap, only every minute boundary).
-    if [ "$(date +%S)" -lt 30 ]; then
+    case "$now_sec" in [0-2][0-9])
         rotate_log
         rotate_all_logs
-    fi
+        ;;
+    esac
 
     sleep 30
 done

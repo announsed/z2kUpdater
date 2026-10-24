@@ -127,6 +127,37 @@ assert_contains "multi: TS-fake repeats=6 → repeats=4-8" "blob=A:repeats=4-8:t
 assert_contains "multi: non-TS fake repeats=8 → repeats=6-10" "blob=B:repeats=6-10:strategy=2" "$OUT_MIX"
 assert_contains "multi: multisplit untouched" "multisplit:pos=1:strategy=3" "$OUT_MIX"
 
+_LUA_BIN=""
+for _cand in lua luajit lua5.4 lua5.3 lua5.1; do
+    if command -v "$_cand" >/dev/null 2>&1; then _LUA_BIN="$_cand"; break; fi
+done
+if [ -n "$_LUA_BIN" ]; then
+    printf "\n--- Lua wrapper: shared ins.arg range is restored across flows ---\n"
+    _LUA_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+    _RR_OUT=$("$_LUA_BIN" - "$_LUA_ROOT/files/lua/z2k-range-rand.lua" <<'EOF'
+local rr_path = arg[1]
+math.randomseed(42)
+local seen = {}
+fake = function(ctx, desync)
+  table.insert(seen, tonumber(desync.arg.repeats))
+  return 0
+end
+dofile(rr_path)
+local shared_arg = { repeats = "1-10000" }
+local d1 = { arg = shared_arg, func_instance = "fake_1", track = { lua_state = {} } }
+local d2 = { arg = shared_arg, func_instance = "fake_1", track = { lua_state = {} } }
+fake(nil, d1)
+fake(nil, d1)
+assert(seen[1] == seen[2], "must stay sticky within the same flow")
+assert(shared_arg.repeats == "1-10000", "shared arg table must be restored to range string")
+fake(nil, d2)
+assert(seen[3] ~= seen[1], "second flow must roll its own value instead of freezing on flow 1")
+print("ok")
+EOF
+)
+    assert_eq "lua wrapper: restores shared arg[key] range and rolls per flow" "ok" "$_RR_OUT"
+fi
+
 printf "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 printf "Results: %d passed, %d failed\n" "$TESTS_PASSED" "$TESTS_FAILED"
 printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"

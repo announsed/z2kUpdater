@@ -78,6 +78,8 @@ for f in files/z2k-auto-update.sh files/z2k-update-lists.sh; do
     assert_eq "$(basename $f): разброс применяется" "yes" \
         "$(grep -q 'z2k_host_jitter' "$ROOT/$f" && echo yes || echo no)"
 done
+assert_eq "z2k-update-lists.sh: z2k_host_jitter определён автономно (без lib/utils.sh)" "yes" \
+    "$(sh -c 'Z2K_UL_LIB=1 . "$1"; command -v z2k_host_jitter >/dev/null 2>&1 && echo yes || echo no' _ "$ROOT/files/z2k-update-lists.sh")"
 
 printf '\nPASSED: %d\nFAILED: %d\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

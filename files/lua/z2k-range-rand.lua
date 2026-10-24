@@ -34,7 +34,7 @@ local z2k_rr_keys_signed = { "tcp_seq", "tcp_ts" }
 -- Parse "a-b" → (a, b) integers, or nil if not a valid pure range.
 -- Only accepts unsigned integers for positive-only keys.
 local function parse_range_pos(v)
-  if type(v) ~= "string" then return nil end
+  if type(v) ~= "string" or not v:find("-", 2, true) then return nil end
   local a, b = v:match("^(%d+)%-(%d+)$")
   if not a then return nil end
   a, b = tonumber(a), tonumber(b)
@@ -46,7 +46,7 @@ end
 -- Accepts leading minus on either side. Never matches a single-value literal
 -- like "-1000" (which is a scalar, not a range).
 local function parse_range_signed(v)
-  if type(v) ~= "string" then return nil end
+  if type(v) ~= "string" or not v:find("-", 2, true) then return nil end
   local a, b = v:match("^(%-?%d+)%-(%-?%d+)$")
   if not a then return nil end
   a, b = tonumber(a), tonumber(b)
@@ -72,7 +72,7 @@ end
 -- so a later invocation on the same flow gets the same number and replays
 -- are byte-identical. Deterministic fallback if cache missing: use the
 -- midpoint (avoids math.random when state isn't ready).
-local function z2k_rr_resolve_one(desync, key, parser)
+local function z2k_rr_resolve_one(desync, key, parser, saved)
   local arg = desync.arg
   local v = arg[key]
   local lo, hi = parser(v)
@@ -98,22 +98,37 @@ local function z2k_rr_resolve_one(desync, key, parser)
     resolved = math.floor((lo + hi) / 2)
   end
 
+  if saved then saved[key] = v end
   arg[key] = tostring(resolved)
 end
 
 local function z2k_rr_resolve_all(desync)
-  if not desync or not desync.arg then return end
+  if not desync or not desync.arg then return nil end
+  local saved = {}
   for i = 1, #z2k_rr_keys_pos do
-    z2k_rr_resolve_one(desync, z2k_rr_keys_pos[i], parse_range_pos)
+    z2k_rr_resolve_one(desync, z2k_rr_keys_pos[i], parse_range_pos, saved)
   end
   for i = 1, #z2k_rr_keys_signed do
-    z2k_rr_resolve_one(desync, z2k_rr_keys_signed[i], parse_range_signed)
+    z2k_rr_resolve_one(desync, z2k_rr_keys_signed[i], parse_range_signed, saved)
+  end
+  return saved
+end
+
+local function z2k_rr_restore_all(desync, saved)
+  if not saved or not desync or not desync.arg then return end
+  local arg = desync.arg
+  for k, v in pairs(saved) do
+    arg[k] = v
   end
 end
 
 -- Install wrappers over upstream global action functions. Save the
 -- original via a local reference before rebinding the global — the
 -- closure captures `_orig`, and calls it after range resolution.
+-- Restore original range strings in `desync.arg` afterwards because
+-- `circular` in `zapret-lib.lua` reuses the shared `ins.arg` table across
+-- connections; leaving the resolved number in `arg[key]` would freeze all
+-- subsequent flows onto the first connection's random roll.
 local function z2k_rr_wrap(fname)
   local _orig = _G[fname]
   if type(_orig) ~= "function" then
@@ -123,8 +138,10 @@ local function z2k_rr_wrap(fname)
     return
   end
   _G[fname] = function(ctx, desync)
-    z2k_rr_resolve_all(desync)
-    return _orig(ctx, desync)
+    local saved = z2k_rr_resolve_all(desync)
+    local r1, r2, r3, r4 = _orig(ctx, desync)
+    z2k_rr_restore_all(desync, saved)
+    return r1, r2, r3, r4
   end
 end
 
