@@ -303,6 +303,14 @@ local function tls_response(crec, state)
     return false, "pending"
 end
 
+local function tls_app_record(p)
+    if #p < 6 or p:byte(1) ~= 23 or p:byte(2) ~= 3 or p:byte(3) < 1 or p:byte(3) > 4 then
+        return false
+    end
+    local len = record_length(p)
+    return len ~= nil and len > 0 and len <= 18432
+end
+
 function z2k_fail_tls_alert(desync, crec)
     if not crec or not desync.dis or not desync.dis.tcp then return false end
     local p, flags = desync.dis.payload or "", desync.dis.tcp.th_flags
@@ -310,16 +318,50 @@ function z2k_fail_tls_alert(desync, crec)
         first_request(desync, crec)
         discord_tls_observe(desync, crec)
         local seq = pos_get(desync, 's')
-        if crec.request_end and not crec.server_hello and not crec.http_started
+        if crec.request_end and not crec.server_hello and not crec.http_started and not crec.response_prefix
             and seq >= crec.request_start and seq < crec.request_end then
+            -- Multi-segment ClientHellos (e.g. post-quantum X25519MLKEM768) span
+            -- two TCP segments inside [request_start, request_end). A single RTO
+            -- resends both segments at once; count retransmission rounds per
+            -- segment offset so retrans=2 is not exhausted by one RTO burst.
+            if type(is_retransmission) == "function" and is_retransmission(desync) then
+                local seen = crec.retrans_seqs
+                if not seen then seen = {}; crec.retrans_seqs = seen end
+                local count = (seen[seq] or 0) + 1
+                seen[seq] = count
+                if count <= (crec.retrans_max or 0) then return false end
+                crec.retrans_max = count
+            end
             return native_failure(desync, crec)
+        end
+        if crec.server_hello and crec.request_end and seq >= crec.request_end
+            and bitand(flags, TH_RST + TH_FIN) == 0
+            and not (type(is_retransmission) == "function" and is_retransmission(desync))
+            and tls_app_record(p) then
+            crec.client_app_sent = true
         end
         return false
     end
     discord_tls_observe(desync, crec)
     -- RST is a transport failure within the native window, regardless of TTL.
     if bitand(flags, TH_RST) ~= 0 then return native_failure(desync, crec) end
-    if crec.server_hello then return false end
+    if crec.server_hello then
+        -- Short/resumed TLS 1.3 flows often finish within the 10-packet NFQUEUE
+        -- window before rseq exceeds inseq=4096. Once ClientHello -> ServerHello
+        -- -> client Application Data -> server Application Data is observed,
+        -- clear stale host failure counters while keeping nocheck unset so an
+        -- early RST within inseq is still caught above.
+        if crec.client_app_sent and not crec.app_verified
+            and bitand(flags, TH_FIN) == 0
+            and not (type(is_retransmission) == "function" and is_retransmission(desync))
+            and tls_app_record(p) then
+            crec.app_verified = true
+            if crec.host_record and type(automate_failure_counter_reset) == "function" then
+                automate_failure_counter_reset(crec.host_record)
+            end
+        end
+        return false
+    end
     if #p == 0 then
         if bitand(flags, TH_FIN) ~= 0 and crec.response_prefix then return false, "neutral" end
         return false

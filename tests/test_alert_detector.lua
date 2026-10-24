@@ -139,4 +139,42 @@ H.test('a single lost packet can recover without reset or rotation',function()
     H.step(H.tcp(d.track,false,4200,'fresh application progress'))
     H.eq(true,c.nocheck); H.eq(nil,c.failure); H.eq(0,#H.sent); H.eq(1,h.nstrategy)
 end)
+H.test('single RTO burst of a two-segment ClientHello does not exhaust retrans=2',function()
+    local seg1=H.client:sub(1,50)
+    local seg2=H.client:sub(51)
+    local d=H.tcp(nil,true,1,seg1,'tls_client_hello'); d.reasm_data=H.client
+    local h,c=H.step(d)
+    H.step(H.tcp(d.track,true,51,seg2,'unknown'))
+    -- First RTO round resends both segments of the same ClientHello flight.
+    H.step(H.tcp(d.track,true,1,seg1,'tls_client_hello',true))
+    H.step(H.tcp(d.track,true,51,seg2,'unknown',true))
+    H.eq(nil,c.failure); H.eq(nil,h.failure_counter); H.eq(0,#H.sent)
+    -- A second RTO round of either segment reaches retrans=2 and fails.
+    H.step(H.tcp(d.track,true,51,seg2,'unknown',true))
+    H.eq(true,c.failure); H.eq(1,h.failure_counter); H.eq(1,#H.sent)
+end)
+H.test('crossed ClientHello retransmission after fragmented server response started is ignored',function()
+    local d=H.tcp(nil,true,1,H.client,'tls_client_hello'); local h,c=H.step(d)
+    H.step(H.tcp(d.track,false,1,H.hello:sub(1,5),'tls_server_hello'))
+    H.step(H.tcp(d.track,true,1,H.client,'tls_client_hello',true))
+    H.step(H.tcp(d.track,true,1,H.client,'tls_client_hello',true))
+    H.eq(nil,c.failure); H.eq(nil,h.failure_counter); H.eq(0,#H.sent)
+end)
+H.test('short TLS 1.3 bidirectional application data resets stale failures without masking early RST',function()
+    local app=string.char(0x17,3,3,0,16)..string.rep('a',16)
+    local d=H.tcp(nil,true,1,H.client,'tls_client_hello'); local h,c=H.step(d)
+    h.failure_counter=2
+    H.step(H.tcp(d.track,false,1,H.hello,'tls_server_hello'))
+    H.eq(2,h.failure_counter) -- ServerHello alone does not reset failures
+    H.step(H.tcp(d.track,false,#H.hello+1,app,'unknown'))
+    H.eq(2,h.failure_counter) -- Server encrypted flight before client app data does not reset
+    H.step(H.tcp(d.track,true,#H.client+1,app,'unknown'))
+    H.eq(2,h.failure_counter) -- Client app data alone without server reply does not reset
+    H.step(H.tcp(d.track,false,#H.hello+#app+1,app,'unknown'))
+    H.eq(nil,h.failure_counter); H.eq(nil,c.nocheck)
+    -- Because nocheck remains unset below inseq=4096, an early RST still counts.
+    local rst=H.tcp(d.track,false,500,''); rst.dis.tcp.th_flags=TH_RST+TH_ACK
+    H.step(rst)
+    H.eq(true,c.failure); H.eq(1,h.failure_counter)
+end)
 H.finish()
