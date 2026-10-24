@@ -24,26 +24,14 @@ WARP_LISTS_DIR="${WARP_LISTS_DIR:-$LISTS_DIR/warp}"
 
 # --- read helpers (POSIX sh, no sourcing of lib/utils.sh required) ---
 
-read_flag() {
-    # read_flag <key> <file> [default]
-    local key="$1" file="$2" def="${3:-0}"
-    [ -f "$file" ] || { printf '%s' "$def"; return 0; }
-    local line="" raw="" val=""
-    while IFS= read -r line || [ -n "$line" ]; do
-        case "$line" in
-            "${key}="*) raw="$line"; break ;;
-        esac
-    done < "$file"
-    if [ -z "$raw" ]; then
-        printf '%s' "$def"
-        return 0
-    fi
+_parse_flag_raw() {
+    # _parse_flag_raw <raw_line> <default> -> sets _pf_val
     # Кавычки снимаем оба вида: генератор пишет значение в двойных
     # (config_official.sh), set_flag — в одинарных. Разворачивать shell-эскейп
     # апострофа ('\'') здесь НЕЛЬЗЯ: safe_config_read из lib/utils.sh его тоже не
     # разворачивает, и панель показывала бы не то имя политики, с которым реально
     # работает сервис.
-    val="${raw#*=}"
+    local val="${1#*=}" def="${2:-0}"
     val="${val#"${val%%[![:space:]]*}"}"
     val="${val%"${val##*[![:space:]]}"}"
     val="${val#\"}"
@@ -56,7 +44,56 @@ read_flag() {
     # on Владислав's router 2026-04-15 after a reinstall left DROP_DPI_RST
     # with no value.
     [ -z "$val" ] && val="$def"
-    printf '%s' "$val"
+    _pf_val="$val"
+}
+
+read_flag() {
+    # read_flag <key> <file> [default]
+    local key="$1" file="$2" def="${3:-0}"
+    [ -f "$file" ] || { printf '%s' "$def"; return 0; }
+    local line="" raw="" _pf_val=""
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            "${key}="*) raw="$line"; break ;;
+        esac
+    done < "$file"
+    if [ -z "$raw" ]; then
+        printf '%s' "$def"
+        return 0
+    fi
+    _parse_flag_raw "$raw" "$def"
+    printf '%s' "$_pf_val"
+}
+
+# Read all 10 dashboard /status flags in a single pass without subshells.
+load_status_flags() {
+    local file="$1" line="" _pf_val=""
+    local _s_cd=0 _s_yt=0 _s_rkn=0 _s_dv=0 _s_ttl=0 _s_ppe=0 _s_au=0 _s_auh=0 _s_ahl=0 _s_gw=0
+    disable_cd="1"
+    category_youtube="1"
+    category_rkn="1"
+    category_discord_voice="1"
+    dynamic_ttl="1"
+    ppe="1"
+    auto_update="1"
+    au_hour="02"
+    autohostlist="0"
+    game_warp="0"
+    [ -f "$file" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            DISABLE_CUSTOM=*)             [ "$_s_cd" = 0 ]  && { _s_cd=1;  _parse_flag_raw "$line" "1";  disable_cd="$_pf_val"; } ;;
+            Z2K_CATEGORY_YOUTUBE=*)       [ "$_s_yt" = 0 ]  && { _s_yt=1;  _parse_flag_raw "$line" "1";  category_youtube="$_pf_val"; } ;;
+            Z2K_CATEGORY_RKN=*)           [ "$_s_rkn" = 0 ] && { _s_rkn=1; _parse_flag_raw "$line" "1";  category_rkn="$_pf_val"; } ;;
+            Z2K_CATEGORY_DISCORD_VOICE=*) [ "$_s_dv" = 0 ]  && { _s_dv=1;  _parse_flag_raw "$line" "1";  category_discord_voice="$_pf_val"; } ;;
+            Z2K_DYNAMIC_TTL=*)            [ "$_s_ttl" = 0 ] && { _s_ttl=1; _parse_flag_raw "$line" "1";  dynamic_ttl="$_pf_val"; } ;;
+            Z2K_PPE_DEOFFLOAD=*)          [ "$_s_ppe" = 0 ] && { _s_ppe=1; _parse_flag_raw "$line" "1";  ppe="$_pf_val"; } ;;
+            Z2K_AUTO_UPDATE_ENABLED=*)    [ "$_s_au" = 0 ]  && { _s_au=1;  _parse_flag_raw "$line" "1";  auto_update="$_pf_val"; } ;;
+            Z2K_AU_HOUR=*)                [ "$_s_auh" = 0 ] && { _s_auh=1; _parse_flag_raw "$line" "02"; au_hour="$_pf_val"; } ;;
+            Z2K_AUTOHOSTLIST=*)           [ "$_s_ahl" = 0 ] && { _s_ahl=1; _parse_flag_raw "$line" "0";  autohostlist="$_pf_val"; } ;;
+            GAME_WARP_ENABLED=*)          [ "$_s_gw" = 0 ]  && { _s_gw=1;  _parse_flag_raw "$line" "0";  game_warp="$_pf_val"; } ;;
+        esac
+    done < "$file"
 }
 
 # set_flag живёт в lib/utils.sh — там же, где его видит и меню.
@@ -281,20 +318,13 @@ is_running() {
 }
 
 service_status_string() {
-    local _run="${1:-}" _inst="${2:-}"
-    if [ -n "$_run" ]; then
-        [ "$_run" = "true" ] && { echo "active"; return 0; }
-    elif is_running; then
+    if is_running; then
         echo "active"
-        return 0
-    fi
-    if [ -n "$_inst" ]; then
-        [ "$_inst" = "true" ] && { echo "stopped"; return 0; }
     elif is_installed; then
         echo "stopped"
-        return 0
+    else
+        echo "not_installed"
     fi
-    echo "not_installed"
 }
 
 # Source BOTH utils.sh (for safe_config_read and helpers) and
@@ -993,9 +1023,8 @@ job_reap() {
     for f in /tmp/z2k-job-*.log; do
         [ -f "$f" ] || continue
         id=${f#/tmp/z2k-job-}; id=${id%.log}
-        # моложе часа — не трогаем в любом случае (find без совпадений всё равно
-        # возвращает 0, поэтому проверяем именно непустой stdout!)
-        [ -n "$(find "$f" -maxdepth 0 -mmin +60 2>/dev/null)" ] || continue
+        # моложе часа — не трогаем в любом случае
+        find "$f" -maxdepth 0 -mmin +60 >/dev/null 2>&1 || continue
         if [ ! -f "/tmp/z2k-job-${id}.exit" ]; then
             pid=$(cat "/tmp/z2k-job-${id}.pid" 2>/dev/null)
             if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
@@ -1353,21 +1382,18 @@ toggle_ppe() {
 
 # UI describes the current action, never the saved start-up preference.
 fastroute_snapshot() {
-    local d="${Z2K_NF_SYSCTL:-/proc/sys/net/netfilter}" value="" _run="${1:-}"
+    local d="${Z2K_NF_SYSCTL:-/proc/sys/net/netfilter}" value
     fastroute=0
     fastroute_available=0
-    [ -r "$d/nf_conntrack_fastroute" ] && IFS= read -r value < "$d/nf_conntrack_fastroute" 2>/dev/null
+    value=$(cat "$d/nf_conntrack_fastroute" 2>/dev/null)
     case "$value" in
         0) fastroute_message='Маршрутный кэш сейчас выключен.' ;;
         1) fastroute_message='Маршрутный кэш сейчас включён.' ;;
         *) fastroute_message='Состояние маршрутного кэша недоступно.'; return ;;
     esac
-    if [ -z "$_run" ]; then
-        is_running && _run="true" || _run="false"
-    fi
     if [ -d "${Z2K_HWNAT_DIR:-/proc/driver/hw_nat}" ]; then
         fastroute_message="Не применяется: обнаружен драйвер аппаратного NAT. $fastroute_message"
-    elif [ "$_run" != "true" ]; then
+    elif ! is_running; then
         fastroute_message="Недоступно: обход остановлен. $fastroute_message"
     else
         [ "$value" = 0 ] && fastroute=1
@@ -1791,57 +1817,53 @@ whitelist_import() {
 _whitelist_import_locked() {
     # Bulk merge — читает многострочный список доменов из stdin (TXT файл).
     # Per-line: trim CR/spaces, skip empty/comments (#), lowercase, validate.
-    # Dedup vs existing whitelist через sort + comm. Append only new entries.
-    # Single service restart в конце (а не на каждый домен).
+    # Dedup vs existing whitelist in a single awk pass (no per-line fork/exec).
+    # Append only new entries.
     # Output: "added=N skipped_dup=N skipped_invalid=N" на stdout.
-    local skipped_invalid=0
     mkdir -p "$LISTS_DIR" 2>/dev/null
     touch "$WHITELIST_FILE" 2>/dev/null
 
-    local tmpnew tmpexisting tmpnewuniq tmpadd
-    tmpnew=$(mktemp) || { echo "added=0 skipped_dup=0 skipped_invalid=0"; return 1; }
-    tmpexisting=$(mktemp) || { rm -f "$tmpnew"; echo "added=0 skipped_dup=0 skipped_invalid=0"; return 1; }
-    tmpnewuniq=$(mktemp) || { rm -f "$tmpnew" "$tmpexisting"; echo "added=0 skipped_dup=0 skipped_invalid=0"; return 1; }
-    tmpadd=$(mktemp) || { rm -f "$tmpnew" "$tmpexisting" "$tmpnewuniq"; echo "added=0 skipped_dup=0 skipped_invalid=0"; return 1; }
+    local tmpadd stats added=0 skipped_dup=0 skipped_invalid=0
+    tmpadd=$(mktemp) || { echo "added=0 skipped_dup=0 skipped_invalid=0"; return 1; }
 
-    local line domain
-    while IFS= read -r line || [ -n "$line" ]; do
-        # Trim leading/trailing whitespace INCLUDING the CR of a CRLF file —
-        # [[:space:]] covers \r, so this also strips the Windows line ending.
-        # (The old `${line%$'\r'}` was a no-op on busybox ash: $'...' ANSI-C
-        # quoting is not supported there, so it never matched a real CR.)
-        line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-        case "$line" in
-            ''|'#'*) continue ;;
-        esac
-        domain=$(printf '%s' "$line" | tr 'A-Z' 'a-z')
-        # A leading '-', any internal space, or any char outside [a-z0-9.-] is
-        # rejected; the charset check also covers tab/CR, so no $'\t' pattern
-        # (which is inert in busybox ash anyway) is needed.
-        case "$domain" in
-            -*|*' '*)      skipped_invalid=$((skipped_invalid + 1)); continue ;;
-            *[!a-z0-9.-]*) skipped_invalid=$((skipped_invalid + 1)); continue ;;
-        esac
-        printf '%s\n' "$domain" >> "$tmpnew"
-    done
-
-    sort -u "$tmpnew" > "$tmpnewuniq"
-    grep -vE '^[[:space:]]*(#|$)' "$WHITELIST_FILE" | sort -u > "$tmpexisting"
-    # busybox `comm` ненадёжен (Input/output error на Entware) — используем awk:
-    # первым файлом проходит существующий список, marks each in `e[]`;
-    # затем по новому списку печатает только те которые НЕ в `e[]`.
-    #
     # Разделяем файлы по FILENAME, а не по NR==FNR: на ПУСТОМ существующем
     # списке awk не читает из него ни одной записи, NR==FNR остаётся истинным
     # для всего второго файла — и весь импорт уезжает в e[], не печатая ничего.
     # Это путь первого импорта у каждого нового пользователя: whitelist.txt ещё
     # пуст, и панель отвечала added=0 на любой файл.
-    awk -v ex="$tmpexisting" 'FILENAME == ex { e[$0]=1; next } !e[$0]' \
-        "$tmpexisting" "$tmpnewuniq" > "$tmpadd"
-    local added skipped_dup
-    added=$(wc -l < "$tmpadd" | tr -d ' ')
-    skipped_dup=$(awk -v ex="$tmpexisting" 'FILENAME == ex { e[$0]=1; next } e[$0]' \
-        "$tmpexisting" "$tmpnewuniq" | wc -l | tr -d ' ')
+    stats=$(LC_ALL=C awk -v ex="$WHITELIST_FILE" -v out="$tmpadd" '
+        FILENAME == ex {
+            s = $0; sub(/\r$/, "", s); sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s)
+            if (s != "" && substr(s, 1, 1) != "#") e[tolower(s)] = 1
+            next
+        }
+        {
+            s = $0; sub(/\r$/, "", s); sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s)
+            if (s == "" || substr(s, 1, 1) == "#") next
+            d = tolower(s)
+            if (substr(d, 1, 1) == "-" || d ~ /[^a-z0-9.-]/) {
+                inv++
+                next
+            }
+            if (d in seen_in) next
+            seen_in[d] = 1
+            if (d in e) {
+                dup++
+            } else {
+                add++
+                print d > out
+            }
+        }
+        END {
+            close(out)
+            printf "%d %d %d\n", add + 0, dup + 0, inv + 0
+        }
+    ' "$WHITELIST_FILE" -)
+    # shellcheck disable=SC2086
+    set -- $stats
+    added="${1:-0}"
+    skipped_dup="${2:-0}"
+    skipped_invalid="${3:-0}"
 
     if [ "$added" -gt 0 ]; then
         _list_end_nl "$WHITELIST_FILE"
@@ -1850,7 +1872,7 @@ _whitelist_import_locked() {
         # NB: НЕ рестартим — whitelist live.
     fi
 
-    rm -f "$tmpnew" "$tmpexisting" "$tmpnewuniq" "$tmpadd"
+    rm -f "$tmpadd"
     printf 'added=%d skipped_dup=%d skipped_invalid=%d\n' "$added" "$skipped_dup" "$skipped_invalid"
 }
 
@@ -1997,7 +2019,7 @@ autohostlist_domains_delete() {
         # тут смотреть нельзя, иначе удаление последней записи молча отменится.
         _f_rc=0
         if [ -f "$tmp" ]; then
-            _file_replace "$f" "$tmp" || _f_rc=1
+            mv -f "$tmp" "$f" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; _f_rc=1; }
         else
             _f_rc=1
         fi
@@ -2303,7 +2325,7 @@ warp_neighbors() {
 # Save and apply as one UI operation. If netfilter rejects the change,
 # restore the saved selection so a failed toggle is not applied later silently.
 warp_devices_commit() {
-    local tmp="$1" f="$WARP_LISTS_DIR/devices.txt" old="$1.old.$$"
+    local tmp="$1" f="$WARP_LISTS_DIR/devices.txt" old="$1.old"
     if [ -f "$f" ]; then
         cp -p "$f" "$old" || return 1
     else
@@ -2323,7 +2345,7 @@ warp_devices_commit() {
 # Включить/выключить устройство по MAC: строка в devices.txt добавляется или
 # убирается; ручные строки (IP, чужие MAC) не трогаются.
 warp_device_toggle() {
-    local mac val="$2" f="$WARP_LISTS_DIR/devices.txt" tmp rc
+    local mac val="$2" f="$WARP_LISTS_DIR/devices.txt" tmp
     mac=$(printf '%s' "$1" | tr 'A-Z-' 'a-z:')
     case "$mac" in
         ??:??:??:??:??:??) ;;
@@ -2331,24 +2353,19 @@ warp_device_toggle() {
     esac
     case "$mac" in *[!0-9a-f:]*) return 1 ;; esac
     warp_lists_ensure_dir || return 1
-    _list_lock "$f" || return 1
     tmp="$WARP_LISTS_DIR/.devices.$$"
     {
         [ -f "$f" ] && awk -v m="$mac" '{ l = tolower($0); gsub(/-/, ":", l); gsub(/^[ \t]+|[ \t]+$/, "", l); if (l != m) print }' "$f"
         [ "$val" = "1" ] && printf '%s\n' "$mac"
         true
-    } > "$tmp" || { rm -f "$tmp"; _list_unlock "$f"; return 1; }
+    } > "$tmp" || { rm -f "$tmp"; return 1; }
     warp_devices_commit "$tmp"
-    rc=$?
-    _list_unlock "$f"
-    return $rc
 }
 
 warp_devices_save() {
     # stdin → devices.txt; stdout: "entries=N dropped=M"
     warp_lists_ensure_dir || return 1
-    local f="$WARP_LISTS_DIR/devices.txt" tmp="$WARP_LISTS_DIR/.devices.$$"
-    _list_lock "$f" || return 1
+    local tmp="$WARP_LISTS_DIR/.devices.$$"
     awk '
     # --- z2k warp SOURCE filter (canonical; keep byte-identical in both copies) ---
     # Поле означает УСТРОЙСТВО В ЛОКАЛЬНОЙ СЕТИ, и фильтр обязан это отражать.
@@ -2378,13 +2395,11 @@ warp_devices_save() {
         if (ip_ok($0)) { print $0; n++; next }
         d++
     }
-    END { printf "entries=%d dropped=%d\n", n, d > "/dev/stderr" }' > "$tmp" 2> "$tmp.stat" || { rm -f "$tmp" "$tmp.stat"; _list_unlock "$f"; return 1; }
+    END { printf "entries=%d dropped=%d\n", n, d > "/dev/stderr" }' > "$tmp" 2> "$tmp.stat" || { rm -f "$tmp" "$tmp.stat"; return 1; }
     if ! warp_devices_commit "$tmp"; then
         rm -f "$tmp" "$tmp.stat"
-        _list_unlock "$f"
         return 1
     fi
-    _list_unlock "$f"
     cat "$tmp.stat"; rm -f "$tmp.stat"
     return 0
 }
@@ -2438,7 +2453,7 @@ warp_lists() {
     local f name entries size mtime
     for f in "$WARP_LISTS_DIR"/*.txt; do
         [ -f "$f" ] || continue
-        name=${f##*/}; name=${name%.txt}
+        name=$(basename "$f" .txt)
         [ "$name" = "devices" ] && continue   # устройства — своя карточка, не список адресов
         entries=$(_warp_destination_count "$f")
         size=$(wc -c < "$f" | tr -d ' ')
@@ -2466,15 +2481,8 @@ warp_game_enabled() {
 }
 
 _warp_destination_count() {
-    local _cnt _ip=0 _dom=0 _tok
-    _cnt=$(awk -v mode=count -f "$ZAPRET2_DIR/z2k-warp-list-filter.awk" "$1" 2>/dev/null)
-    for _tok in $_cnt; do
-        case "$_tok" in
-            ip=*) _ip=${_tok#ip=} ;;
-            domain=*) _dom=${_tok#domain=} ;;
-        esac
-    done
-    printf '%d\n' $(( ${_ip:-0} + ${_dom:-0} ))
+    awk -v mode=save -f "$ZAPRET2_DIR/z2k-warp-list-filter.awk" "$1" 2>/dev/null \
+        | awk '$0 !~ /^#/ && NF { n++ } END { print n+0 }'
 }
 
 warp_games() {
@@ -2483,7 +2491,7 @@ warp_games() {
     local f name entries
     for f in "$WARP_GAMES_DIR"/*.txt; do
         [ -f "$f" ] || continue
-        name=${f##*/}; name=${name%.txt}
+        name=$(basename "$f" .txt)
         entries=$(_warp_destination_count "$f")
         printf '%s\t%s\t%s\n' "$name" "${entries:-0}" "$(warp_game_enabled "$name" && echo 1 || echo 0)"
     done
@@ -2579,7 +2587,6 @@ warp_list_save() {
     skipped=$((total - saved))
     rm -f "$raw"
 
-    _list_lock "$file" || { rm -f "$tmp"; _warp_create_abort "$mode" "$file"; echo "lock failed" >&2; return 1; }
     if [ "$mode" = "append" ]; then
         touch "$file" 2>/dev/null
         # Файл мог остаться без завершающего перевода строки (правка руками,
@@ -2587,7 +2594,7 @@ warp_list_save() {
         # в 1.2.3.45.6.7.8 — панель рапортует saved=1, а загрузчик ipset и
         # счётчик записей видят НОЛЬ валидных адресов, пропадают оба.
         _list_end_nl "$file"
-        cat "$tmp" >> "$file" || { rm -f "$tmp"; _list_unlock "$file"; echo "write failed" >&2; return 1; }
+        cat "$tmp" >> "$file" || { rm -f "$tmp"; echo "write failed" >&2; return 1; }
     else
         # Подмена целиком, а не `cat "$tmp" > "$file"`: cat СНАЧАЛА обнуляет
         # цель, и обрыв питания или ENOSPC на середине превращал список из 18k
@@ -2595,11 +2602,10 @@ warp_list_save() {
         # пустой ipset. Заявку create (noclobber выше) rename не снимает: имя не
         # освобождается ни на мгновение, оно лишь начинает указывать на новый
         # inode, и параллельный create по-прежнему упирается в занятое имя.
-        _file_replace "$file" "$tmp" || { _list_unlock "$file"; _warp_create_abort "$mode" "$file"; echo "write failed" >&2; return 1; }
+        _file_replace "$file" "$tmp" || { _warp_create_abort "$mode" "$file"; echo "write failed" >&2; return 1; }
     fi
     rm -f "$tmp"
     chmod 644 "$file" 2>/dev/null || true
-    _list_unlock "$file"
     warp_ipset_reload_if_enabled
     printf 'saved=%d saved_ip=%d saved_domain=%d skipped_invalid=%d\n' \
         "${saved:-0}" "${saved_ip:-0}" "${saved_domain:-0}" "${skipped:-0}"
@@ -2664,7 +2670,7 @@ tunnel_enable() {
     if [ -f "$cfg" ]; then
         if grep -q '^TG_PROXY_USER_DISABLED=' "$cfg"; then
             echo "Снимаю флаг TG_PROXY_USER_DISABLED → 0 в /opt/zapret2/config"
-            sed -i 's/^TG_PROXY_USER_DISABLED=.*/TG_PROXY_USER_DISABLED=0/' "$cfg"
+            set_flag TG_PROXY_USER_DISABLED 0 "$cfg"
         fi
     fi
     if [ -x "/opt/etc/init.d/S98tg-tunnel" ]; then
@@ -2691,13 +2697,8 @@ tunnel_disable() {
     # реальный прогресс, не «пустую секцию между разделителями».
     local cfg="${ZAPRET2_DIR}/config"
     if [ -f "$cfg" ]; then
-        if grep -q '^TG_PROXY_USER_DISABLED=' "$cfg"; then
-            echo "Устанавливаю TG_PROXY_USER_DISABLED=1 в /opt/zapret2/config"
-            sed -i 's/^TG_PROXY_USER_DISABLED=.*/TG_PROXY_USER_DISABLED=1/' "$cfg"
-        else
-            echo "Добавляю TG_PROXY_USER_DISABLED=1 в /opt/zapret2/config"
-            echo "TG_PROXY_USER_DISABLED=1" >> "$cfg"
-        fi
+        echo "Устанавливаю TG_PROXY_USER_DISABLED=1 в /opt/zapret2/config"
+        set_flag TG_PROXY_USER_DISABLED 1 "$cfg"
     else
         echo "Конфиг /opt/zapret2/config не найден — флаг не записан"
     fi
@@ -2994,13 +2995,16 @@ state_bulk() {
     fi
 
     _state_lock "$STATE_FILE" || { rm -f "$hosts"; echo "state busy" >&2; return 1; }
-    local done_n=0 _f _tmp
-    # Считаем по ОСНОВНОМУ файлу: он же и показывается в панели.
-    if [ -f "$STATE_FILE" ]; then
-        done_n=$(awk -F'\t' -v key="$key" '
-            NR == FNR { want[$0] = 1; next }
-            $1 == key && ($2 in want) { n++ }
-            END { print n + 0 }' "$hosts" "$STATE_FILE" 2>/dev/null)
+    local done_n=0 _f _tmp _pf="" _ff=""
+    # Считаем по тому же объединённому представлению (primary + fallback),
+    # которое state_read() показывает в панели (без двойного счёта одного хоста).
+    [ -f "$STATE_FILE" ] && _pf="$STATE_FILE"
+    [ -f "$STATE_FILE_FALLBACK" ] && _ff="$STATE_FILE_FALLBACK"
+    if [ -n "$_pf$_ff" ]; then
+        done_n=$(awk -F'\t' -v hosts="$hosts" -v key="$key" '
+            FILENAME == hosts { want[$0] = 1; next }
+            $1 == key && ($2 in want) && !($2 in counted) { counted[$2] = 1; n++ }
+            END { print n + 0 }' "$hosts" $_pf $_ff 2>/dev/null)
         case "$done_n" in ''|*[!0-9]*) done_n=0 ;; esac
     fi
     for _f in "$STATE_FILE" "$STATE_FILE_FALLBACK"; do
@@ -4137,7 +4141,7 @@ domain_list_save() (
     case "$expected" in ''|*[!a-f0-9]*) echo 'Неизвестная версия списка. Обновите список.' >&2; exit 2 ;; esac
     [ "${#expected}" = 64 ] || exit 2
     mkdir -p "$LISTS_DIR" || exit 1
-    raw=$(mktemp "$target.raw.XXXXXX") || exit 1
+    raw=$(mktemp "/tmp/z2k-dlraw.XXXXXX") || exit 1
     tmp=$(mktemp "$target.edit.XXXXXX") || { rm -f "$raw"; exit 1; }
     locked=0
     trap 'rm -f "$raw" "$tmp"; [ "$locked" = 0 ] || _list_unlock "$target"' EXIT
@@ -4169,7 +4173,7 @@ domain_list_save() (
     if [ "$check_coverage" = 1 ]; then
         _extra_domains_validate_file "$tmp" "$target" || exit 2
     fi
-    chmod 644 "$tmp" && mv -f "$tmp" "$target" || { echo 'Не удалось сохранить список.' >&2; exit 1; }
+    _file_replace "$target" "$tmp" || { echo 'Не удалось сохранить список.' >&2; exit 1; }
     domain_list_revision "$target"
 )
 
@@ -4179,29 +4183,39 @@ extra_domains_revision() { domain_list_revision "$EXTRA_DOMAINS_FILE"; }
 extra_domains_save() { domain_list_save "$EXTRA_DOMAINS_FILE" "$1" 1; }
 
 # Check only newly added records; retaining/removing an existing record remains
-# possible after other lists have changed. Read each large catalogue once, not
-# once per imported domain. The target list lock is already held by the caller.
+# possible after other lists have changed. Keep only new candidate suffixes in
+# awk memory and stream large catalogues (up to 75k lines) without loading them
+# into an associative array. The target list lock is already held by the caller.
 _extra_domains_validate_file() {
     local candidate="$1" old="$2" label path
     [ -f "$old" ] || old=/dev/null
     while IFS='|' read -r label path; do
         [ -s "$path" ] || continue
-        LC_ALL=C awk -v old="$old" -v covered="$path" -v label="$label" '
+        LC_ALL=C awk -v old="$old" -v cand_file="$candidate" -v label="$label" '
             { sub(/\r$/, ""); sub(/^[ \t]+/, ""); sub(/[ \t]+$/, ""); $0=tolower($0) }
-            FILENAME==old {previous[$0]=1; next}
-            FILENAME==covered {if($0!="" && $0 !~ /^#/) have[$0]=1; next}
-            $0=="" || $0 ~ /^#/ || previous[$0] {next}
-            {
-                domain=$0; suffix=domain
-                while(index(suffix,".")) {
-                    if(have[suffix]) {
-                        printf "Домен %s уже покрыт записью %s в списке «%s». Список не изменён.\n", domain,suffix,label > "/dev/stderr"
-                        exit 2
+            FILENAME==old { if($0!="" && $0 !~ /^#/) previous[$0]=1; next }
+            FILENAME==cand_file {
+                if($0=="" || $0 ~ /^#/ || ($0 in previous)) next
+                cand[++nc]=$0
+                s=$0
+                while(index(s,".")) { want[s]=1; sub(/^[^.]+\./,"",s) }
+                next
+            }
+            nc==0 { exit 0 }
+            $0!="" && $0 !~ /^#/ && ($0 in want) { have[$0]=1 }
+            END {
+                for(i=1; i<=nc; i++) {
+                    domain=cand[i]; suffix=domain
+                    while(index(suffix,".")) {
+                        if(suffix in have) {
+                            printf "Домен %s уже покрыт записью %s в списке «%s». Список не изменён.\n", domain,suffix,label > "/dev/stderr"
+                            exit 2
+                        }
+                        sub(/^[^.]+\./,"",suffix)
                     }
-                    sub(/^[^.]+\./,"",suffix)
                 }
             }
-        ' "$old" "$path" "$candidate" || return 2
+        ' "$old" "$candidate" "$path" || return 2
     done <<CATALOG
 $(_domain_lists_catalog)
 CATALOG

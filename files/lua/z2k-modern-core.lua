@@ -50,15 +50,24 @@ function z2k_nohost_key(desync)
     return "nohost"
 end
 
+local DEFAULT_NLD2_ARG = { nld = "2" }
+
 -- Share subdomains using native nld=2; preserve packet hostname, IP literals,
 -- address-family splitting and hostless fallback semantics of the native core.
 function z2k_service_hostkey(desync)
-    local copy, arg = {}, {}
-    for k, v in pairs(desync) do copy[k] = v end
-    for k, v in pairs(desync.arg) do arg[k] = v end
-    arg.nld = "2"
-    copy.arg = arg
-    return standard_hostkey(copy)
+    if not desync then return nil end
+    local arg = desync.arg
+    if type(arg) == "table" then
+        local prev_nld = arg.nld
+        arg.nld = "2"
+        local hk = standard_hostkey(desync)
+        arg.nld = prev_nld
+        return hk
+    end
+    desync.arg = DEFAULT_NLD2_ARG
+    local hk = standard_hostkey(desync)
+    desync.arg = arg
+    return hk
 end
 
 local function z2k_num(v, fallback)
@@ -157,19 +166,20 @@ function z2k_ipfrag3(dis, ipfrag_options)
     ipfrag_options = ipfrag_options or {}
     local l3 = l3_len(dis)
     local plen = l3 + l4_len(dis) + #dis.payload
-    local totalfrag = plen - l3
-    if totalfrag <= 24 then
-        DLOG("z2k_ipfrag3: packet too short for 3 fragments")
-        return nil
-    end
-
-    local len1, off2, len2, off3, len3 = z2k_ipfrag3_params(dis, ipfrag_options, totalfrag)
-    if not len1 then
-        DLOG("z2k_ipfrag3: invalid split params")
-        return nil
-    end
 
     if dis.ip then
+        local totalfrag = plen - l3
+        if totalfrag <= 24 then
+            DLOG("z2k_ipfrag3: packet too short for 3 fragments")
+            return nil
+        end
+
+        local len1, off2, len2, off3, len3 = z2k_ipfrag3_params(dis, ipfrag_options, totalfrag)
+        if not len1 then
+            DLOG("z2k_ipfrag3: invalid split params")
+            return nil
+        end
+
         local ip_id = dis.ip.ip_id == 0 and math.random(1, 0xFFFF) or dis.ip.ip_id
 
         local d1 = deepcopy(dis)
@@ -200,15 +210,15 @@ function z2k_ipfrag3(dis, ipfrag_options)
             return nil
         end
 
-        local p1, p2, p3, p4, p5 = z2k_ipfrag3_params(dis, ipfrag_options, totalfrag6)
-        if not p1 then
+        local len1, off2, len2, off3, len3 = z2k_ipfrag3_params(dis, ipfrag_options, totalfrag6)
+        if not len1 then
             DLOG("z2k_ipfrag3: invalid ipv6 split params")
             return nil
         end
-        len1, off2, len2, off3, len3 = p1, p2, p3, p4, p5
 
         local l3extra_with_frag = l3extra_before_frag + 8
-        local ident = math.random(1, 0xFFFFFFFF)
+        -- Avoid 0xFFFFFFFF overflowing signed 32-bit luaL_checkint in LuaJIT / Lua 5.1
+        local ident = math.random(0, 0x7FFF) * 65536 + math.random(1, 0xFFFF)
 
         local d1 = deepcopy(dis)
         insert_ip6_exthdr(d1.ip6, idxfrag, IPPROTO_FRAGMENT, bu16(IP6F_MORE_FRAG) .. bu32(ident))
@@ -459,8 +469,11 @@ local function z2k_quic_morph_payload(payload, arg)
             local enc, enc_len = z2k_qvarint_encode_bytes(token_fill_len, 1)
             if enc and enc_len == 1 then
                 b[pos] = enc[1]
-                for i = 1, token_fill_len do
-                    table.insert(b, token_pos + i - 1, math.random(0, 255))
+                for i = #b, token_pos, -1 do
+                    b[i + token_fill_len] = b[i]
+                end
+                for i = 0, token_fill_len - 1 do
+                    b[token_pos + i] = math.random(0, 255)
                 end
 
                 -- Token expanded; QUIC Initial Length field does NOT need adjustment
@@ -717,11 +730,11 @@ function z2k_quic_morph_v2(ctx, desync)
         }
     end
 
-    local ok = pcall(rawsend_dissect_ipfrag, out_dis, {
+    local ok, sent = pcall(rawsend_dissect_ipfrag, out_dis, {
         rawsend = rs,
         ipfrag = ipfrag
     })
-    if not ok then
+    if not ok or sent == false then
         return
     end
 

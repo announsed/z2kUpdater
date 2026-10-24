@@ -606,6 +606,7 @@ clean_google_domains() {
                 "$ZAPRET2_DIR/lists/extra-domains.txt" \
                 "$ZAPRET2_DIR/lists/autohostlist-domains.txt"; do
         [ -f "$list" ] || continue
+        grep -qiE '(google\.com|chatgpt\.com|claude\.ai|github\.com|cloudflareclient\.com|cloudflare-dns\.com)' "$list" 2>/dev/null || continue
         tmp=$(mktemp "${list}.google.XXXXXX") || { failed=1; continue; }
         if ! filter_google_domains "$list" > "$tmp"; then
             rm -f "$tmp"; failed=1; continue
