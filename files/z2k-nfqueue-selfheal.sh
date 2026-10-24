@@ -69,7 +69,21 @@ log() {
 
 # Значение из конфига без кавычек (последнее присваивание побеждает, как при сорсинге).
 cfg_val() {
-    sed -n "s/^$1=//p" "$ZAPRET_CONFIG" 2>/dev/null | tail -n 1 | tr -d "\"'"
+    local _k="$1" _line _v="" _rest
+    [ -r "$ZAPRET_CONFIG" ] || return 0
+    while IFS= read -r _line || [ -n "$_line" ]; do
+        case "$_line" in
+            "$_k="*) _v="${_line#"$_k="}" ;;
+        esac
+    done < "$ZAPRET_CONFIG"
+    while :; do
+        case "$_v" in
+            *\"*) _rest="${_v#*\"}"; _v="${_v%%\"*}$_rest" ;;
+            *\'*) _rest="${_v#*\'}"; _v="${_v%%\'*}$_rest" ;;
+            *) break ;;
+        esac
+    done
+    [ -n "$_v" ] && printf '%s\n' "$_v"
 }
 
 # --- Preconditions (cheapest first; every miss is a silent no-op) ------------
@@ -178,9 +192,13 @@ nfq_missing() {   # $1 = iptables|ip6tables ; $2 = -4|-6
     # PKT_IN, а пустой PKT_IN берёт значение PKT_OUT (так же в S99zapret2). Чего
     # конфиг не требует, того и не ждём — иначе вечный re-apply на законно
     # урезанном наборе.
+    local _chains_tcp _chains_udp _chains
+    _chains_tcp="$(nfq_expected_chains tcp)"
+    _chains_udp="$(nfq_expected_chains udp)"
     for _iface in $_wan; do
         for _p in tcp udp; do
-            for _c in $(nfq_expected_chains "$_p"); do
+            case "$_p" in tcp) _chains="$_chains_tcp" ;; udp) _chains="$_chains_udp" ;; esac
+            for _c in $_chains; do
                 case "$_c" in POSTROUTING) _dir=-o ;; *) _dir=-i ;; esac
                 if printf '%s\n' "$_dump" | awk -v c="$_c" -v p="$_p" -v d="$_dir" -v iface="$_iface" '
                     $1=="-A" && $2==c {
@@ -207,7 +225,11 @@ nfq_missing() {   # $1 = iptables|ip6tables ; $2 = -4|-6
 nfq_expected_chains() {
     local _up _ports _out _in
     [ "$(cfg_val NFQWS2_ENABLE)" = "0" ] && return 0
-    _up=$(printf '%s' "$1" | tr 'a-z' 'A-Z')
+    case "$1" in
+        tcp) _up=TCP ;;
+        udp) _up=UDP ;;
+        *)   _up=$(printf '%s' "$1" | tr 'a-z' 'A-Z') ;;
+    esac
     _ports=$(cfg_val "NFQWS2_PORTS_${_up}")
     [ -n "$_ports" ] || return 0
     _out=$(cfg_val "NFQWS2_${_up}_PKT_OUT")
