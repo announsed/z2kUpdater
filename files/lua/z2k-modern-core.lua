@@ -157,19 +157,20 @@ function z2k_ipfrag3(dis, ipfrag_options)
     ipfrag_options = ipfrag_options or {}
     local l3 = l3_len(dis)
     local plen = l3 + l4_len(dis) + #dis.payload
-    local totalfrag = plen - l3
-    if totalfrag <= 24 then
-        DLOG("z2k_ipfrag3: packet too short for 3 fragments")
-        return nil
-    end
-
-    local len1, off2, len2, off3, len3 = z2k_ipfrag3_params(dis, ipfrag_options, totalfrag)
-    if not len1 then
-        DLOG("z2k_ipfrag3: invalid split params")
-        return nil
-    end
 
     if dis.ip then
+        local totalfrag = plen - l3
+        if totalfrag <= 24 then
+            DLOG("z2k_ipfrag3: packet too short for 3 fragments")
+            return nil
+        end
+
+        local len1, off2, len2, off3, len3 = z2k_ipfrag3_params(dis, ipfrag_options, totalfrag)
+        if not len1 then
+            DLOG("z2k_ipfrag3: invalid split params")
+            return nil
+        end
+
         local ip_id = dis.ip.ip_id == 0 and math.random(1, 0xFFFF) or dis.ip.ip_id
 
         local d1 = deepcopy(dis)
@@ -200,12 +201,11 @@ function z2k_ipfrag3(dis, ipfrag_options)
             return nil
         end
 
-        local p1, p2, p3, p4, p5 = z2k_ipfrag3_params(dis, ipfrag_options, totalfrag6)
-        if not p1 then
+        local len1, off2, len2, off3, len3 = z2k_ipfrag3_params(dis, ipfrag_options, totalfrag6)
+        if not len1 then
             DLOG("z2k_ipfrag3: invalid ipv6 split params")
             return nil
         end
-        len1, off2, len2, off3, len3 = p1, p2, p3, p4, p5
 
         local l3extra_with_frag = l3extra_before_frag + 8
         local ident = math.random(1, 0xFFFFFFFF)
@@ -717,11 +717,11 @@ function z2k_quic_morph_v2(ctx, desync)
         }
     end
 
-    local ok = pcall(rawsend_dissect_ipfrag, out_dis, {
+    local ok, sent = pcall(rawsend_dissect_ipfrag, out_dis, {
         rawsend = rs,
         ipfrag = ipfrag
     })
-    if not ok then
+    if not ok or sent == false then
         return
     end
 
