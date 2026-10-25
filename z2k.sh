@@ -1148,6 +1148,7 @@ tls_clienthello_4pda_to.bin
 tls_clienthello_vk_com.bin
 tls_clienthello_gosuslugi_ru.bin
 t2.bin
+rdp.bin
 syn_packet.bin
 stun.bin
 quic_initial_www_google_com.bin
