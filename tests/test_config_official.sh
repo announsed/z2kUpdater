@@ -473,6 +473,36 @@ assert_contains "Z2K_PPE_DEOFFLOAD=0 survives regen (webpanel toggle no longer r
 PPE_OUT=$(test_ppe_deoffload "absent" "")
 assert_contains "Z2K_PPE_DEOFFLOAD absent -> emits default =1" "Z2K_PPE_DEOFFLOAD=1" "$PPE_OUT"
 
+printf "\n--- Z2K_DNS_REDIRECT: защита DNS — флаг переживает regen ---\n"
+
+# Заворот открытого DNS (S99 _z2k_dns_redirect_apply, хук 89, панель
+# toggle_dns_redirect) читает флаг из конфига; regen обязан его сохранять, иначе
+# выключенная в панели защита вернётся после любой пересборки конфига.
+test_dns_redirect_flag() {
+    local tag="$1" file_line="$2"
+    local root="${MOCK_DIR}/dnsr-$tag"
+    rm -rf "$root"
+    mkdir -p "$root/extra_strats/TCP/YT" "$root/extra_strats/TCP/YT_GV" \
+             "$root/extra_strats/TCP/RKN" "$root/extra_strats/UDP/YT" "$root/lists"
+    echo "youtube.com"     > "$root/extra_strats/TCP/YT/List.txt"
+    echo "googlevideo.com" > "$root/extra_strats/TCP/YT_GV/List.txt"
+    echo "youtube.com"     > "$root/extra_strats/UDP/YT/List.txt"
+    echo "rutracker.org"   > "$root/extra_strats/TCP/RKN/List.txt"
+    echo "whitelisted.example.com" > "$root/lists/whitelist.txt"
+    echo "--filter-tcp=443 --filter-l7=tls --lua-desync=circular:fails=3:time=60:key=rkn_tcp --lua-desync=fake:strategy=1" \
+        > "$root/extra_strats/TCP/RKN/Strategy.txt"
+    { echo "ENABLED=1"; if [ -n "$file_line" ]; then echo "$file_line"; fi; } > "$root/config"
+    ( ZAPRET2_DIR="$root" create_official_config "$root/config" >/dev/null 2>&1 )
+    grep -E '^Z2K_DNS_REDIRECT=' "$root/config" | head -1
+    rm -rf "$root"
+}
+DNSR_OUT=$(test_dns_redirect_flag "off" "Z2K_DNS_REDIRECT=0")
+assert_contains "Z2K_DNS_REDIRECT=0 survives regen" "Z2K_DNS_REDIRECT=0" "$DNSR_OUT"
+DNSR_OUT=$(test_dns_redirect_flag "absent" "")
+assert_contains "Z2K_DNS_REDIRECT absent -> emits default =1" "Z2K_DNS_REDIRECT=1" "$DNSR_OUT"
+DNSR_OUT=$(test_dns_redirect_flag "junk" "Z2K_DNS_REDIRECT=maybe")
+assert_contains "Z2K_DNS_REDIRECT junk -> normalised to 1" "Z2K_DNS_REDIRECT=1" "$DNSR_OUT"
+
 printf "\n--- Z2K_PADENCAP: padencap autoinjector flag ---\n"
 
 # Z2K_PADENCAP (default 0): when =1, inject_z2k_tls_mods добавляет

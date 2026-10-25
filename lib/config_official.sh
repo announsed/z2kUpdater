@@ -1978,6 +1978,7 @@ create_official_config() {
     local saved_POLICY_EXCLUDE="0"
     local _pn_q="" _pe_q=""   # те же значения, экранированные под одинарные кавычки
     local saved_Z2K_PPE_DEOFFLOAD="1"
+    local saved_Z2K_DNS_REDIRECT="1"
     local saved_Z2K_PPE_DEOFFLOAD_QUIC="1"
     local saved_Z2K_FASTROUTE_OFF="1"
     # Вход в панель по паролю. Умолчание 0 — выключено; панель годами ставили
@@ -2058,6 +2059,10 @@ create_official_config() {
         # NAT (S99 z2k_fastroute_wanted, панель toggle_fastroute). Тот же класс.
         saved_Z2K_FASTROUTE_OFF=$(safe_config_read "Z2K_FASTROUTE_OFF" "$config_file" "1")
         case "$saved_Z2K_FASTROUTE_OFF" in 0|1) ;; *) saved_Z2K_FASTROUTE_OFF=1 ;; esac
+        # Z2K_DNS_REDIRECT — заворот открытого DNS из LAN на резолвер роутера
+        # (S99 _z2k_dns_redirect_apply, хук 89, панель toggle_dns_redirect). Тот же класс.
+        saved_Z2K_DNS_REDIRECT=$(safe_config_read "Z2K_DNS_REDIRECT" "$config_file" "1")
+        case "$saved_Z2K_DNS_REDIRECT" in 0|1) ;; *) saved_Z2K_DNS_REDIRECT=1 ;; esac
         saved_Z2K_PANEL_AUTH=$(safe_config_read "Z2K_PANEL_AUTH" "$config_file" "0")
         saved_Z2K_AUTO_UPDATE_ENABLED=$(safe_config_read "Z2K_AUTO_UPDATE_ENABLED" "$config_file" "1")
         saved_Z2K_WARP_TRANSPORT=$(safe_config_read "Z2K_WARP_TRANSPORT" "$config_file" "auto")
@@ -2465,6 +2470,10 @@ Z2K_PPE_DEOFFLOAD_QUIC=${saved_Z2K_PPE_DEOFFLOAD_QUIC}
 # там, где нет драйвера аппаратного NAT (портированная KeeneticOS на Cudy и
 # т.п.). 0 — не трогать никогда. Тумблер в панели, «Режимы».
 Z2K_FASTROUTE_OFF=${saved_Z2K_FASTROUTE_OFF}
+# Защита открытого DNS: незашифрованные запросы из LAN к внешним серверам
+# заворачиваются на резолвер роутера (nat REDIRECT :53), иначе провайдер
+# подменяет ответы на заблокированные имена. 0 — не заворачивать. Тумблер в панели.
+Z2K_DNS_REDIRECT=${saved_Z2K_DNS_REDIRECT}
 Z2K_PANEL_AUTH=${saved_Z2K_PANEL_AUTH}
 Z2K_AUTO_UPDATE_ENABLED=${saved_Z2K_AUTO_UPDATE_ENABLED}
 Z2K_WARP_TRANSPORT=${saved_Z2K_WARP_TRANSPORT}

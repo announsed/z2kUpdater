@@ -97,6 +97,8 @@ log_info "Удаление netfilter хуков..."
 for hook in /opt/etc/ndm/netfilter.d/000-zapret2.sh \
             /opt/etc/ndm/netfilter.d/000-zapret.sh \
             /opt/etc/ndm/netfilter.d/*zapret* \
+            /opt/etc/ndm/netfilter.d/89-z2k-dns-redirect.sh \
+            /opt/etc/ndm/netfilter.d/*z2k-dns* \
             /opt/etc/ndm/netfilter.d/90-z2k-tg-redirect.sh \
             /opt/etc/ndm/netfilter.d/*z2k-tg* \
             /opt/etc/ndm/netfilter.d/91-z2k-http-tunnel-redirect.sh \
@@ -244,6 +246,13 @@ for cidr in $TG_CIDRS; do
     done
 done
 # Destroy the ipset itself — NDM doesn't touch ipsets, so it would linger.
+# Защита DNS: два правила REDIRECT :53 (udp/tcp) по ipset LAN-подсетей.
+for _p in udp tcp; do
+    while iptables -w -t nat -C PREROUTING -p "$_p" --dport 53 -m set --match-set z2k_lan4 src -m set ! --match-set z2k_lan4 dst -j REDIRECT --to-ports 53 2>/dev/null; do
+        iptables -w -t nat -D PREROUTING -p "$_p" --dport 53 -m set --match-set z2k_lan4 src -m set ! --match-set z2k_lan4 dst -j REDIRECT --to-ports 53 2>/dev/null || break
+    done
+done
+ipset destroy z2k_lan4 2>/dev/null && log_info "  Удалён ipset z2k_lan4"
 if ipset destroy z2k_tg_dc 2>/dev/null; then
     log_info "  Удалён ipset z2k_tg_dc"
 fi

@@ -265,6 +265,7 @@ case "$method $path" in
         category_discord_voice=$(read_flag "Z2K_CATEGORY_DISCORD_VOICE" "$CONFIG_FILE" "1")
         dynamic_ttl=$(read_flag "Z2K_DYNAMIC_TTL" "$CONFIG_FILE" "1")
         ppe=$(read_flag "Z2K_PPE_DEOFFLOAD" "$CONFIG_FILE" "1")
+        dns_redirect=$(read_flag "Z2K_DNS_REDIRECT" "$CONFIG_FILE" "1")
         fastroute_snapshot
         auto_update=$(read_flag "Z2K_AUTO_UPDATE_ENABLED" "$CONFIG_FILE" "1")
         # Час ночного обновления. Нормализуем здесь, а не в панели: конфиг
@@ -294,6 +295,7 @@ case "$method $path" in
         printf ',"fastroute":';              json_string "${fastroute:-0}"
         printf ',"fastroute_available":';     json_string "$fastroute_available"
         printf ',"fastroute_status":';        json_string "$fastroute_message"
+        printf ',"dns_redirect":';           json_string "${dns_redirect:-1}"
         printf ',"auto_update":';            json_string "${auto_update:-1}"
         printf ',"au_hour":';                json_string "${au_hour:-02}"
         printf ',"autohostlist":';           json_string "${autohostlist:-0}"
@@ -333,6 +335,7 @@ case "$method $path" in
     "POST /toggle/dynamic-ttl"|\
     "POST /toggle/ppe"|\
     "POST /toggle/fastroute"|\
+    "POST /toggle/dns-redirect"|\
     "POST /toggle/auto-update"|\
     "POST /toggle/category-youtube"|\
     "POST /toggle/category-rkn"|\
@@ -354,6 +357,7 @@ case "$method $path" in
             /toggle/dynamic-ttl)     _toggle_fn=toggle_dynamic_ttl;     _label="Динамический TTL" ;;
             /toggle/ppe)             _toggle_fn=toggle_ppe;             _label="PPE de-offload" ;;
             /toggle/fastroute)       _toggle_fn=toggle_fastroute;       _label="Программный fastpath" ;;
+            /toggle/dns-redirect)    _toggle_fn=toggle_dns_redirect;    _label="Защита DNS" ;;
             /toggle/auto-update)     _toggle_fn=toggle_auto_update;     _label="Автообновление" ;;
             /toggle/autohostlist)    _toggle_fn=toggle_autohostlist;    _label="Автохостлист" ;;
         esac
