@@ -5,8 +5,9 @@
 # (53), yt_tcp и gv_tcp получили восемь новых на 12–19 (30). state.tsv хранит
 # НОМЕР плеча, поэтому init переносит номера по полной таблице до подъёма
 # демона. Проверяем таблицу на границах, стирание снятых плеч, слитый ключ
-# google_tls, запасной файл в tmpfs, снимок до переноса, идемпотентность и
-# уважение к чужому замку.
+# google_tls, голосовой пул (25.10: авто стирается, замороженное переносится),
+# запасной файл в tmpfs, снимок до переноса, идемпотентность и уважение к
+# чужому замку.
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 TMP=$(mktemp -d)
@@ -49,6 +50,9 @@ printf 'google_tls\tmerged-gv1.example|4\t23\t100\tauto\t\n'
 printf 'google_tls\tmerged-gv22.example|4\t44\t100\tauto\t\n'
 printf 'quic\tquic.example|4\t7\t100\tauto\t\n'
 printf 'discord_udp\tnohost\t4\t100\tauto\t\n'
+printf 'discord_udp\tvoice-frozen1\t1\t100\tfrozen\t\n'
+printf 'discord_udp\tvoice-frozen3\t3\t100\tfrozen\t\n'
+printf 'discord_udp\tvoice-frozen6\t6\t100\tfrozen\t\n'
 } > "$STATE"
 printf 'rkn_tcp\tfb.example|4\t24\t100\tauto\t\n' > "$Z2K_STATE_FALLBACK"
 cp "$STATE" "$TMP/original"
@@ -73,7 +77,10 @@ check "google_tls yt part 22 -> 30"           google_tls 'merged-yt22.example|4'
 check "google_tls gv part 23 (gv 1) -> 31"    google_tls 'merged-gv1.example|4'  31
 check "google_tls gv part 44 (gv 22) -> 60"   google_tls 'merged-gv22.example|4' 60
 check "quic row untouched"                    quic    'quic.example|4'    7
-check "discord row untouched"                 discord_udp nohost 4
+check "discord auto row erased (new blob, start from 1)" discord_udp nohost ABSENT
+check "discord frozen 1 -> 2"                discord_udp voice-frozen1 2
+check "discord frozen 3 -> 1 (merged into new first)" discord_udp voice-frozen3 1
+check "discord frozen 6 stays 6"             discord_udp voice-frozen6 6
 if awk -F'\t' '$2=="shift13.example|4" && $5=="frozen" && $6=="shift13.example" {f=1} END{exit !f}' "$STATE"; then ok "frozen mode and sni preserved"; else no "frozen mode and sni preserved"; fi
 if [ "$(head -2 "$STATE" | grep -c '^#')" = 2 ]; then ok "header comments kept"; else no "header comments kept"; fi
 if awk -F'\t' '$2=="fb.example|4" && $3==30 {f=1} END{exit !f}' "$Z2K_STATE_FALLBACK"; then ok "fallback file in tmpfs migrated too"; else no "fallback file in tmpfs migrated too"; fi

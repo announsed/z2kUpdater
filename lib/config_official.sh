@@ -224,21 +224,24 @@ generate_nfqws2_opt_from_strategies() {
     # --payload=discord_ip_discovery,stun — гейтим именно discovery/STUN-сигнатуры
     # (не quic_initial — то для QUIC/443, не для голоса). БЕЗ keepalive (см.
     # NFQWS2_PORTS_UDP_KEEPALIVE ниже — отключён по этой же причине).
-    # Пул — на блобе quic_dbankcloud; сторонний снимок ACTIVE_DISCORD_UDP,
-    # добавленный 26.08.2026, снят 10.09.2026 по решению Марка —
-    # очередь вернулась к прежней шестёрке.
-    # strategy=1 = базовый fake quic_dbankcloud repeats=10 (рычаг bol-van против
-    # просадки голоса — "поиграться репитами" #6915; 10 = рабочий референс юзера);
-    # 2-6 — fallback'и (разные repeats/ttl) для circular-перебора, все под d4-cutoff.
-    # 2026-04-30: blob мигрирован quic_google → quic_dbankcloud (TSPU
-    # фингерпринтит google-QUIC clienthello, dbankcloud обходит надёжнее).
+    # Пул — на блобе quic_initial_steamcommunity_com (QUIC Initial с SNI steamcommunity.com,
+    # 1200 байт): это голосовой фейк референсного набора с 22.07.2026, им же он
+    # глушит и STUN. 25.10.2026 пул переведён на него целиком по решению Марка:
+    # «у них работает сейчас — делаем как у них». Раньше (с 30.04.2026) пул стоял
+    # на quic_dbankcloud — это прежний фейк того же набора, от которого он сам
+    # отказался.
+    # strategy=1 = fake repeats=6 — голосовая строка референса один в один.
+    # 2-6 — прежние fallback'и пула (repeats 10/3/4/5 и 6 с autottl) на новом
+    # блобе, для circular-перебора, все под d4-cutoff. Прежнее плечо 3 (repeats=6)
+    # совпало с новым первым и слито с ним; номера в state.tsv переносит
+    # _z2k_migrate_pool_renumber_v1 в S99.
     # hostkey=z2k_nohost_key — нативный hostkey-генератор (z2k-modern-core.lua,
     # через bol-van automate_host_record arg.hostkey). Discord/STUN UDP без SNI
     # → константа "nohost" → shared rotation state autostate[discord_udp][nohost]
     # вместо per-IP фрагментации стокового host_ip fallback'а (иначе Discord
     # voice холодно стартует на каждом новом DC-IP). Нативная замена archived
     # allow_nohost (z2k-autocircular) — алгоритм ротации остаётся circular().
-    discord_udp="--filter-udp=50000-50099,1400,3478-3481,5349,19294-19344 --filter-l7=discord,stun --in-range=a --out-range=a --payload=all --lua-desync=circular:fails=3:time=60:udp_in=1:udp_out=4:key=discord_udp:hostkey=z2k_nohost_key --in-range=x --out-range=-d4 --payload=discord_ip_discovery,stun --lua-desync=fake:payload=all:blob=quic_dbankcloud:repeats=10:strategy=1 --lua-desync=fake:payload=all:blob=quic_dbankcloud:repeats=3:strategy=2 --lua-desync=fake:payload=all:blob=quic_dbankcloud:repeats=6:strategy=3 --lua-desync=fake:payload=all:blob=quic_dbankcloud:repeats=6:ip_autottl=-2,3-20:strategy=4 --lua-desync=fake:payload=all:blob=quic_dbankcloud:repeats=4:strategy=5 --lua-desync=fake:payload=all:blob=quic_dbankcloud:repeats=5:strategy=6"
+    discord_udp="--filter-udp=50000-50100,1400,3478-3481,5349,19294-19344 --filter-l7=discord,stun --in-range=a --out-range=a --payload=all --lua-desync=circular:fails=3:time=60:udp_in=1:udp_out=4:key=discord_udp:hostkey=z2k_nohost_key --in-range=x --out-range=-d4 --payload=discord_ip_discovery,stun --lua-desync=fake:payload=all:blob=quic_initial_steamcommunity_com:repeats=6:strategy=1 --lua-desync=fake:payload=all:blob=quic_initial_steamcommunity_com:repeats=10:strategy=2 --lua-desync=fake:payload=all:blob=quic_initial_steamcommunity_com:repeats=3:strategy=3 --lua-desync=fake:payload=all:blob=quic_initial_steamcommunity_com:repeats=6:ip_autottl=-2,3-20:strategy=4 --lua-desync=fake:payload=all:blob=quic_initial_steamcommunity_com:repeats=4:strategy=5 --lua-desync=fake:payload=all:blob=quic_initial_steamcommunity_com:repeats=5:strategy=6"
 
     # Дефолт для пула, чей Strategy.txt пуст или нечитаем.
     #
@@ -1592,12 +1595,15 @@ generate_nfqws2_opt_from_strategies() {
         add_hostlist_line "${extra_strats_dir}/TCP/YT_GV/List.txt" "$wl_excl --hostlist=${extra_strats_dir}/TCP/YT_GV/List.txt $youtube_gv_tcp --new"
     fi
 
-    # QUIC — общий профиль: ютуб плюс весь набор списков РКН.
+    # QUIC — общий профиль: ютуб плюс весь набор списков РКН и список Discord.
     #
     # Набор ТОТ ЖЕ, что у TCP-профиля (rkn_lists_head + rkn_lists_tail): основной
     # список, дополнительные домены, найденное детектором и автохостлист, если он
-    # включён. Discord-список сюда НЕ идёт — его UDP живёт на своих портах и
-    # разбирается профилем discord_udp.
+    # включён. Discord-список добавлен 25.10.2026: cdn.discordapp.com и
+    # media.discordapp.net объявляют HTTP/3 (alt-svc h3), и без него попытки
+    # QUIC к ним резались, а клиент откатывался на TCP с задержкой. Референсный
+    # набор для winws держит домены Discord в общем списке своего QUIC-профиля.
+    # Голос Discord сюда не попадает: он на других портах, профиль discord_udp.
     #
     # Порядок списков значения не имеет (движок объединяет), но ютубовский стоит
     # первым намеренно: так видно, что профиль вырос из него, а не появился из
@@ -1609,6 +1615,7 @@ generate_nfqws2_opt_from_strategies() {
     fi
     if [ "$category_rkn" != 0 ]; then
         quic_lists="$quic_lists $rkn_lists_head$rkn_lists_tail"
+        [ -s "${extra_strats_dir}/TCP_Discord.txt" ] && quic_lists="$quic_lists --hostlist=${extra_strats_dir}/TCP_Discord.txt"
         [ -n "$quic_anchor" ] || quic_anchor="${extra_strats_dir}/TCP/RKN/List.txt"
     fi
     if [ -n "$quic_anchor" ]; then
@@ -2179,7 +2186,7 @@ NFQWS2_ENABLE=1
 NFQWS2_PORTS_TCP="80,443,2053,2083,2087,2096,5222,8443"
 
 # UDP ports to process (will be filtered by --filter-udp in NFQWS2_OPT)
-NFQWS2_PORTS_UDP="443,50000-50099,1400,3478-3481,5349,19294-19344"
+NFQWS2_PORTS_UDP="443,50000-50100,1400,3478-3481,5349,19294-19344"
 
 # Discord voice/STUN: KEEPALIVE DISABLED (empty) — по канону bol-van.
 # Раньше (2026-06-11) на discord-портах connbytes-лимит снимался (keepalive),

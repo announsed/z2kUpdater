@@ -539,6 +539,13 @@ _z2k_migrate_quic_pool_key()
 # (Z2K_REFACTOR_PHASE3=1): в нём yt шли как 1..22, gv — как 22+n; теперь yt
 # 1..30, gv — 30+n.
 #
+# Голосовой пул discord_udp (25.10.2026) переведён на новый фейк целиком, и
+# первым встало его плечо repeats=6; прежнее плечо 3 (repeats=6) слито с ним.
+# Автоматическая запись стирается: после смены блоба помнить номер незачем,
+# подбор начинается с первого плеча. Замороженная пользователем запись
+# переносится по таблице 1→2, 2→3, 3→1, 4..6 на месте — те же повторы, что
+# человек выбрал руками.
+#
 # Здесь, а не шагом релиза, и до подъёма демона — по тем же причинам, что и
 # перенос ключа QUIC выше. Замок тот же; не отняли — попробуем на следующем
 # старте, отметку не ставим. Снимок до переноса остаётся рядом (.pre-renumber-v1).
@@ -550,6 +557,7 @@ _z2k_migrate_pool_renumber_v1()
 	local fallback="${Z2K_STATE_FALLBACK:-${Z2K_AUTOCIRCULAR_FALLBACK_OVERRIDE:-/tmp}/z2k-autocircular-state.tsv}"
 	local rkn_map='1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=x,11=10,12=11,13=19,14=20,15=21,16=22,17=23,18=24,19=25,20=26,21=27,22=28,23=29,24=30,25=31,26=32,27=33,28=34,29=35,30=36,31=37,32=38,33=39,34=40,35=41,36=42,37=43,38=44,39=45,40=x,41=46,42=47,43=48,44=49,45=x,46=x,47=50,48=51,49=52,50=53'
 	local yt_map='1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=20,13=21,14=22,15=23,16=24,17=25,18=26,19=27,20=28,21=29,22=30'
+	local dv_map='1=2,2=3,3=1,4=4,5=5,6=6'
 
 	local f moved=0 skipped=0
 	for f in "$base/state.tsv" "$fallback"; do
@@ -559,13 +567,13 @@ _z2k_migrate_pool_renumber_v1()
 		# замок на одном из них не должен на следующем старте прогнать таблицу
 		# по второму ещё раз.
 		[ -f "$f.pre-renumber-v1" ] && continue
-		awk -F'\t' '$1 ~ /^(rkn_tcp|yt_tcp|gv_tcp|google_tls)$/ { found = 1; exit } END { exit !found }' "$f" 2>/dev/null || continue
+		awk -F'\t' '$1 ~ /^(rkn_tcp|yt_tcp|gv_tcp|google_tls|discord_udp)$/ { found = 1; exit } END { exit !found }' "$f" 2>/dev/null || continue
 		if ( set -C; printf '%s' "$(date +%s 2>/dev/null || echo 0)" > "$f.lock" ) 2>/dev/null; then
-			if awk -F'\t' -v RKN="$rkn_map" -v YT="$yt_map" '
+			if awk -F'\t' -v RKN="$rkn_map" -v YT="$yt_map" -v DV="$dv_map" '
 				function load(s, m,   n, a, i, kv) { n = split(s, a, ","); for (i = 1; i <= n; i++) { split(a[i], kv, "="); m[kv[1]] = kv[2] } }
 				# "" — номер вне таблицы (оставить), "x" — плечо снято (стереть строку)
 				function remap(m, n) { return (n in m) ? m[n] : "" }
-				BEGIN { OFS = "\t"; load(RKN, rkn); load(YT, yt) }
+				BEGIN { OFS = "\t"; load(RKN, rkn); load(YT, yt); load(DV, dv) }
 				/^#/ || NF < 3 { print; next }
 				$1 == "rkn_tcp" { n = remap(rkn, $3 + 0) }
 				$1 == "yt_tcp" || $1 == "gv_tcp" { n = remap(yt, $3 + 0) }
@@ -574,7 +582,9 @@ _z2k_migrate_pool_renumber_v1()
 					if (s <= 22) n = remap(yt, s)
 					else { n = remap(yt, s - 22); if (n != "" && n != "x") n += 30 }
 				}
-				$1 ~ /^(rkn_tcp|yt_tcp|gv_tcp|google_tls)$/ {
+				# Голос: автоматическую запись стереть, замороженную перенести.
+				$1 == "discord_udp" { n = ($5 == "frozen") ? remap(dv, $3 + 0) : "x" }
+				$1 ~ /^(rkn_tcp|yt_tcp|gv_tcp|google_tls|discord_udp)$/ {
 					if (n == "x") next
 					if (n != "") $3 = n
 				}
@@ -596,7 +606,46 @@ _z2k_migrate_pool_renumber_v1()
 		mkdir -p "${ZAPRET_BASE}/state" 2>/dev/null
 		: > "$done_flag" 2>/dev/null
 	fi
-	[ "$moved" = "0" ] || echo "TCP pool strategy numbers migrated in rotation state (rkn 53, yt/gv 30)"
+	[ "$moved" = "0" ] || echo "Pool strategy numbers migrated in rotation state (rkn 53, yt/gv 30, discord voice)"
+	return 0
+}
+
+# ПОЛЬЗОВАТЕЛЬСКИЕ СТРАТЕГИИ НА СНЯТОМ ГОЛОСОВОМ БЛОБЕ (25.10.2026).
+#
+# Голосовой пул переехал с quic_dbankcloud на quic_initial_steamcommunity_com, и
+# старый блоб больше не регистрируется. Панель собирает пользовательскую
+# голосовую стратегию из работающего конфига, поэтому в lists/custom-strategies
+# имя старого блоба есть у каждого, кто её правил. Оставь его там — nfqws2 не
+# найдёт блоб и не поднимется. Меняем имя на новое, остальное в строке
+# пользователя не трогаем: повторы и TTL, выбранные руками, сохраняются — так же,
+# как замороженный номер в state.tsv. Оригинал остаётся рядом (.pre-voice-blob-v1).
+_z2k_migrate_custom_voice_blob_v1()
+{
+	local dir="${ZAPRET_BASE}/lists/custom-strategies"
+	local done_flag="${ZAPRET_BASE}/state/custom-voice-blob-v1.done"
+	[ -f "$done_flag" ] && return 0
+	local f moved=0 failed=0
+	for f in "$dir"/*.txt; do
+		[ -f "$f" ] || continue
+		grep -Eq 'blob=quic_dbankcloud([^A-Za-z0-9_]|$)' "$f" 2>/dev/null || continue
+		[ -f "$f.pre-voice-blob-v1" ] || cp -p "$f" "$f.pre-voice-blob-v1" 2>/dev/null || { failed=1; continue; }
+		# Три формы конца имени по отдельности: чередование в BRE не переносимо
+		# между sed BusyBox, GNU и BSD.
+		if sed -e 's/blob=quic_dbankcloud:/blob=quic_initial_steamcommunity_com:/g' \
+			-e 's/blob=quic_dbankcloud\([[:space:]]\)/blob=quic_initial_steamcommunity_com\1/g' \
+			-e 's/blob=quic_dbankcloud$/blob=quic_initial_steamcommunity_com/' "$f" > "$f.mig" 2>/dev/null \
+			&& [ -s "$f.mig" ] && mv -f "$f.mig" "$f" 2>/dev/null; then
+			moved=$((moved + 1))
+		else
+			rm -f "$f.mig" 2>/dev/null
+			failed=1
+		fi
+	done
+	if [ "$failed" = "0" ]; then
+		mkdir -p "${ZAPRET_BASE}/state" 2>/dev/null
+		: > "$done_flag" 2>/dev/null
+	fi
+	[ "$moved" = "0" ] || echo "Custom strategies moved to the new Discord voice blob ($moved file(s))"
 	return 0
 }
 
@@ -1239,10 +1288,13 @@ QUIC1_BLOB="$ZAPRET_BASE/files/fake/quic_1.bin"
 QUIC_RUTRACKER_BLOB="$ZAPRET_BASE/files/fake/quic_initial_rutracker_org.bin"
 [ -s "$QUIC_RUTRACKER_BLOB" ] && NFQWS2_OPT_BASE="$NFQWS2_OPT_BASE --blob=quic_rutracker:@$QUIC_RUTRACKER_BLOB"
 
-# Russian banking-cloud QUIC decoy — used by the
-# Discord UDP profile as a fake blob where the google-QUIC fingerprint is flagged.
-QUIC_DBANKCLOUD_BLOB="$ZAPRET_BASE/files/fake/quic_initial_dbankcloud_ru.bin"
-[ -s "$QUIC_DBANKCLOUD_BLOB" ] && NFQWS2_OPT_BASE="$NFQWS2_OPT_BASE --blob=quic_dbankcloud:@$QUIC_DBANKCLOUD_BLOB"
+# QUIC Initial с SNI steamcommunity.com (1200 байт, MIT) — голосовой фейк
+# референсного набора с 22.07.2026, скопирован в репозиторий 25.10.2026. На нём
+# весь голосовой пул discord_udp. Прежний голосовой фейк quic_dbankcloud снят:
+# его больше не использует ни одна стратегия, а пользовательские файлы, где он
+# мог остаться, переводит _z2k_migrate_custom_voice_blob_v1 ниже.
+QUIC_STEAM_BLOB="$ZAPRET_BASE/files/fake/quic_initial_steamcommunity_com.bin"
+[ -s "$QUIC_STEAM_BLOB" ] && NFQWS2_OPT_BASE="$NFQWS2_OPT_BASE --blob=quic_initial_steamcommunity_com:@$QUIC_STEAM_BLOB"
 
 # Снимки ClientHello (MIT), скопированы в репозиторий 23.10.2026 — блобы живут
 # только у нас, извне не тянутся. sferum (661 байт, SNI www.sferum.ru, TLS 1.3 с
@@ -3037,6 +3089,7 @@ start()
     _z2k_migrate_quic_pool_key
     # Перенумерация TCP-пулов 23.10.2026 — тоже строго до подъёма демона.
     _z2k_migrate_pool_renumber_v1
+    _z2k_migrate_custom_voice_blob_v1
 
     if ! start_daemons; then
         echo "ERROR: zapret2 service NOT started — обход не работает"
