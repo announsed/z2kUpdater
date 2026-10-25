@@ -2813,26 +2813,60 @@ diag_is_complete() {
 _tcp16_count() {
     awk '!/^#/ && NF {n++} END {print n + 0}' "$1" 2>/dev/null || echo 0
 }
+# Сетей, у которых имя ЕСТЬ: строки карты, чья AS значится в списке сетей с
+# блоком. Прежде печаталось просто число строк карты, а это разные множества —
+# и карта могла нести имена сетей без блока (рантайм их не применяет), завышая
+# покрытие (ревью 25.10.2026).
+_tcp16_named() {
+    awk -F'\t' '
+        FILENAME == ARGV[1] { if ($1 ~ /^[0-9]+$/) want[$1] = 1; next }
+        $1 ~ /^[0-9]+$/ && $2 != "" && want[$1] { n++ }
+        END { print n + 0 }
+    ' "${ZAPRET2_DIR}/state/tcp16_asn.txt" "${ZAPRET2_DIR}/state/tcp16_sni.txt" 2>/dev/null || echo 0
+}
+
+# Идёт ли проба — по её замку, а не по pgrep.
+#
+# pgrep -f 'z2k-tcp16-probe.sh' считал пробой и `vi z2k-tcp16-probe.sh`, и
+# любую команду, где это имя попало в строку запуска. Замок проба ставит сама
+# (каталог с номером процесса), им же она защищается от второго прогона —
+# один источник правды на оба вопроса.
+_tcp16_running() {
+    local dir="${Z2K_TCP16_LOCK:-/tmp/z2k-tcp16-probe.lock}" owner
+    [ -d "$dir" ] || return 1
+    owner=$(cat "$dir/pid" 2>/dev/null)
+    case "$owner" in ''|*[!0-9]*) return 1 ;; esac
+    kill -0 "$owner" 2>/dev/null
+}
+
 tcp16_status_json() {
     local flag="${ZAPRET2_DIR}/state/tcp16.flag"
-    local f="" ts="" age="" in_cfg=false running=false
+    local f="" ts="" started="" age="" in_cfg=false running=false stale=false
     [ -s "$flag" ] && f=$(cat "$flag" 2>/dev/null)
     case "$f" in 0|1) ;; *) f="" ;; esac
-    # Метка времени — только вместе с ответом: одна без другого означает, что
-    # проба идёт прямо сейчас.
     if [ -n "$f" ] && [ -s "$flag.ts" ]; then
         ts=$(cat "$flag.ts" 2>/dev/null)
         case "$ts" in ''|*[!0-9]*) ts="" ;; *) age=$(( $(date +%s) - ts )) ;; esac
     fi
+    _tcp16_running && running=true
+    # Прогон оборвался: флаг проба ставит в СЕРЕДИНЕ работы, а отметку
+    # завершения — последней строкой. Есть начало новее завершения и никто не
+    # работает — значит прошлый прогон убит, и человеку надо это видеть:
+    # именно так 25.10.2026 выглядели «имён 0, обход не в конфиге».
+    started=$(cat "$flag.started" 2>/dev/null)
+    case "$started" in ''|*[!0-9]*) started="" ;; esac
+    if [ "$running" = false ] && [ -n "$started" ] && [ "${ts:-0}" -lt "$started" ] 2>/dev/null; then
+        stale=true
+    fi
+    # «В конфиге» — у РАБОТАЮЩЕГО движка, а не только в файле: после правки
+    # конфига без перезапуска это разные ответы.
     grep -q -- '--lua-desync=z2k_sni_pick' "$CONFIG_FILE" 2>/dev/null && in_cfg=true
-    # Идёт ли проба: по процессу, а не по метке — метка появляется в конце.
-    pgrep -f 'z2k-tcp16-probe.sh' >/dev/null 2>&1 && running=true
     printf '{"ok":true,"measured":'; json_string "$f"
     printf ',"age":%s' "${age:-null}"
     printf ',"nets_blocked":%s' "$(_tcp16_count "${ZAPRET2_DIR}/state/tcp16_asn.txt")"
-    printf ',"names":%s' "$(_tcp16_count "${ZAPRET2_DIR}/state/tcp16_sni.txt")"
+    printf ',"names":%s' "$(_tcp16_named)"
     printf ',"candidates":%s' "$(_tcp16_count "${ZAPRET2_DIR}/lists/sni_wl_candidates.txt")"
-    printf ',"in_config":%s,"running":%s}\n' "$in_cfg" "$running"
+    printf ',"in_config":%s,"running":%s,"stale":%s}\n' "$in_cfg" "$running" "$stale"
 }
 
 # Ручной запуск пробы — та же команда, что у планировщика в 03:30, без
@@ -2841,7 +2875,7 @@ tcp16_status_json() {
 # перезапускает сервис — панель это переживает как штатный обрыв.
 tcp16_probe_async() {
     [ -r "${ZAPRET2_DIR}/z2k-tcp16-probe.sh" ] || return 3
-    if pgrep -f 'z2k-tcp16-probe.sh' >/dev/null 2>&1; then
+    if _tcp16_running; then
         return 4
     fi
     svc_action_async "Проба линии на обрыв 16 КБ" "sh \"${ZAPRET2_DIR}/z2k-tcp16-probe.sh\""

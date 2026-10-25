@@ -29,8 +29,12 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 ZAPRET2_DIR="$TMP/z2k"; CONFIG_FILE="$ZAPRET2_DIR/config"
 mkdir -p "$ZAPRET2_DIR/state" "$ZAPRET2_DIR/lists"
 json_string() { printf '"%s"' "$(printf '%s' "$1" | sed 's/["\\]/\\&/g')"; }
-pgrep() { return 1; }   # проба не идёт
-eval "$(sed -n '/^_tcp16_count()/,/^}/p; /^tcp16_status_json()/,/^}/p; /^tcp16_probe_async()/,/^}/p' "$ACT")"
+# Замок пробы — в песочнице: по нему панель и отвечает «идёт».
+Z2K_TCP16_LOCK="$TMP/probe.lock"
+eval "$(sed -n '/^_tcp16_count()/,/^}/p; /^_tcp16_named()/,/^}/p; /^_tcp16_running()/,/^}/p; /^tcp16_status_json()/,/^}/p; /^tcp16_probe_async()/,/^}/p' "$ACT")"
+probe_lock_on()  { mkdir -p "$Z2K_TCP16_LOCK"; echo $$ > "$Z2K_TCP16_LOCK/pid"; }
+probe_lock_off() { rm -rf "$Z2K_TCP16_LOCK"; }
+probe_lock_off
 
 printf '# a\n24940\n13335\n' > "$ZAPRET2_DIR/state/tcp16_asn.txt"
 printf '24940\t300.ya.ru\n' > "$ZAPRET2_DIR/state/tcp16_sni.txt"
@@ -68,9 +72,38 @@ case "$(svc_action_async "Проба линии на обрыв 16 КБ" "sh \"$
     "$_job") ok "команда пробы — sh <ZAPRET2_DIR>/z2k-tcp16-probe.sh без аргументов" ;;
     *) no "команда пробы" "sh probe без аргументов" "$_job" ;;
 esac
-pgrep() { return 0; }   # проба уже идёт
+probe_lock_on          # проба уже идёт
 tcp16_probe_async >/dev/null 2>&1; assert_eq "вторая проба поверх идущей — код 4" "4" "$?"
-pgrep() { return 1; }
+J=$(tcp16_status_json)
+case "$J" in *'"running":true'*) ok "идущая проба видна по замку" ;; *) no "running по замку" true "$J" ;; esac
+probe_lock_off
+# Замок остался от убитой пробы (владельца нет) — не «идёт».
+mkdir -p "$Z2K_TCP16_LOCK"; echo 4194300 > "$Z2K_TCP16_LOCK/pid"
+J=$(tcp16_status_json)
+case "$J" in *'"running":false'*) ok "брошенный замок мёртвого владельца — проба не идёт" ;; *) no "брошенный замок" false "$J" ;; esac
+tcp16_probe_async >/dev/null 2>&1; assert_eq "брошенный замок не мешает запустить пробу" "0" "$?"
+probe_lock_off
+
+# --- 1б. оборванный прогон и честный счёт имён -------------------------------
+printf '# a\n24940\n13335\n' > "$ZAPRET2_DIR/state/tcp16_asn.txt"
+# В карте есть имя сети БЕЗ блока — рантайм его не применит, в счёт не идёт.
+printf '24940\t300.ya.ru\n55555\tchужая.example\n' > "$ZAPRET2_DIR/state/tcp16_sni.txt"
+printf '1\n' > "$ZAPRET2_DIR/state/tcp16.flag"
+_now=$(date +%s)
+printf '%s\n' "$((_now - 7200))" > "$ZAPRET2_DIR/state/tcp16.flag.ts"
+printf '%s\n' "$((_now - 7300))" > "$ZAPRET2_DIR/state/tcp16.flag.started"
+J=$(tcp16_status_json)
+case "$J" in *'"names":1'*) ok "в счёт имён идут только сети с блоком" ;; *) no "names" 1 "$J" ;; esac
+case "$J" in *'"stale":false'*) ok "завершённый прогон — не оборван" ;; *) no "stale" false "$J" ;; esac
+# Начало новее завершения и никто не работает — прогон оборван.
+printf '%s\n' "$((_now - 60))" > "$ZAPRET2_DIR/state/tcp16.flag.started"
+J=$(tcp16_status_json)
+case "$J" in *'"stale":true'*) ok "оборванный прогон виден отдельным признаком" ;; *) no "stale" true "$J" ;; esac
+probe_lock_on
+J=$(tcp16_status_json)
+case "$J" in *'"running":true,"stale":false'*) ok "пока проба идёт, оборванным прогон не считается" ;; *) no "stale при running" false "$J" ;; esac
+probe_lock_off
+rm -f "$ZAPRET2_DIR/state/tcp16.flag.started"
 
 # Маршруты есть в api.sh и ведут к этим функциям.
 grep -q '"GET /tcp16")' "$API" && ok "маршрут GET /tcp16" || no "маршрут GET /tcp16" "есть" "нет"
@@ -93,6 +126,7 @@ const src = fs.readFileSync(process.argv[2], "utf8");
 const tcp16Line = new Function(src + "\nreturn tcp16Line;")();
 const j = (t) => { const l = tcp16Line(t); return l.kind + "|" + l.text; };
 console.log("blocked\t" + j({ measured: "1", age: 5400, nets_blocked: 12, names: 9, in_config: true, running: false }));
+console.log("stale\t" + j({ measured: "1", age: 5400, nets_blocked: 12, names: 0, in_config: false, running: false, stale: true }));
 console.log("blockedNoCfg\t" + j({ measured: "1", age: 60, nets_blocked: 1, names: 0, in_config: false, running: false }));
 console.log("clean\t" + j({ measured: "0", age: 172800, nets_blocked: 0, names: 0, in_config: false, running: false }));
 console.log("never\t" + j({ measured: "", age: null, nets_blocked: 0, names: 0, in_config: false, running: false }));
@@ -100,6 +134,7 @@ console.log("running\t" + j({ measured: "0", age: 10, nets_blocked: 0, names: 0,
 JS
         R=$(node "$TMP/drive.js" "$TMP/fn.js" 2>&1)
         case "$R" in *'blocked	warn|Блок есть, проверено 1 ч назад: сетей с обрывом 12, имён подобрано 9, обход включён'*) ok "блок найден: вердикт, давность, сети, имена, обход — одной строкой" ;; *) no "блок найден" "warn|Блок есть…" "$R" ;; esac
+        case "$R" in *'stale	warn|Прошлая проба оборвалась'*) ok "оборванный прогон: карточка говорит о повторе, а не «имён 0»" ;; *) no "оборванный прогон" "warn|Прошлая проба оборвалась…" "$R" ;; esac
         case "$R" in *'blockedNoCfg	bad|'*'но обход в конфиг не попал'*) ok "блок есть, а в конфиге нет — расхождение красным" ;; *) no "расхождение" "bad|…не попал" "$R" ;; esac
         case "$R" in *'clean	good|Блока нет, проверено 2 дн назад'*) ok "блока нет: давность в днях, зелёным" ;; *) no "блока нет" "good|Блока нет…" "$R" ;; esac
         case "$R" in *'never	|Линия ещё не проверялась'*) ok "не мерили — так и написано" ;; *) no "не измерялась" "" "$R" ;; esac

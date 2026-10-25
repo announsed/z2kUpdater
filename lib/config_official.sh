@@ -1497,7 +1497,7 @@ generate_nfqws2_opt_from_strategies() {
     # горизонт видимости движка меряется в ПАКЕТАХ, и здоровая крупная
     # загрузка неотличима от обрыва (замер 30.08.2026: instagram отдал 404 КБ,
     # видно 17 КБ). Поэтому линию мерит отдельная проба по курируемым мишеням
-    # (z2k-tcp16-probe.sh, метод runnin4ik/dpi-detector), а сюда приходит
+    # (z2k-tcp16-probe.sh, метод замера накачкой объёма), а сюда приходит
     # готовый ответ.
     #
     # Файла нет — значит не мерили, и механизм выключен. Это единственное
@@ -1516,7 +1516,23 @@ generate_nfqws2_opt_from_strategies() {
         # и поштучного перебора имён здесь больше нет — механизм в ротации не
         # участвует (решение Марка 10.09.2026).
         sni_pick="--lua-desync=z2k_sni_pick:payload=tls_client_hello:dir=out:blob=z2k_ch${_sp_k:+:$_sp_k}${_sp_n:+:$_sp_n}"
-        sni_pick="$sni_pick --lua-desync=fake:payload=tls_client_hello:dir=out:blob=z2k_ch:optional:repeats=8:tcp_ts=-1000"
+        # ФУЛИНГ ФЕЙКА — ДВА, И ВТОРОЙ НЕ ЗАВИСИТ ОТ КЛИЕНТА.
+        #
+        # Фейк обязан умереть по дороге: он несёт ЧУЖОЕ имя, и если доедет до
+        # сервера — сломает рукопожатие тому самому человеку, которому мы
+        # помогаем. Одного tcp_ts мало: по мануалу движка он работает, только
+        # когда timestamp option в пакете УЖЕ есть, а в Windows она выключена
+        # по умолчанию. Замер 12.09.2026 (стенд с tcp_timestamps=0): только
+        # tcp_ts — до сервера доехал ФЕЙК; tcp_ts + tcp_md5 — доехало
+        # настоящее. Контроль на роутере владельца показал, что md5 ничего не
+        # портит там, где метки есть.
+        #
+        # md5 здесь уже стоял в p-84.8 и пропал при СПЛОШНОМ откате содержимого
+        # к p-84.7 (97527dc8) — откатывали весь релиз по жалобам, причину в
+        # md5 никто не искал, а в остальных 22 фейках арсенала он с тех пор
+        # живёт. Возвращён по ревью 25.10.2026; инвариант сторожит
+        # tests/test_tcp16_chain_wiring.sh.
+        sni_pick="$sni_pick --lua-desync=fake:payload=tls_client_hello:dir=out:blob=z2k_ch:optional:repeats=8:tcp_ts=-1000:tcp_md5"
     fi
 
     if [ -n "$rkn_circ" ]; then
@@ -1986,6 +2002,7 @@ create_official_config() {
     local _pn_q="" _pe_q=""   # те же значения, экранированные под одинарные кавычки
     local saved_Z2K_PPE_DEOFFLOAD="1"
     local saved_Z2K_DNS_REDIRECT="1"
+    local saved_Z2K_SNI_STALL="1"
     local saved_Z2K_PPE_DEOFFLOAD_QUIC="1"
     local saved_Z2K_FASTROUTE_OFF="1"
     # Вход в панель по паролю. Умолчание 0 — выключено; панель годами ставили
@@ -2070,6 +2087,11 @@ create_official_config() {
         # (S99 _z2k_dns_redirect_apply, хук 89, панель toggle_dns_redirect). Тот же класс.
         saved_Z2K_DNS_REDIRECT=$(safe_config_read "Z2K_DNS_REDIRECT" "$config_file" "1")
         case "$saved_Z2K_DNS_REDIRECT" in 0|1) ;; *) saved_Z2K_DNS_REDIRECT=1 ;; esac
+        # Z2K_SNI_STALL — выключатель обхода обрыва на 16 КБ (генератор, блок
+        # sni_pick). Раньше его не было ни здесь, ни в heredoc: выключатель
+        # исчезал при первой же пересборке (ревью 25.10.2026).
+        saved_Z2K_SNI_STALL=$(safe_config_read "Z2K_SNI_STALL" "$config_file" "1")
+        case "$saved_Z2K_SNI_STALL" in 0|1) ;; *) saved_Z2K_SNI_STALL=1 ;; esac
         saved_Z2K_PANEL_AUTH=$(safe_config_read "Z2K_PANEL_AUTH" "$config_file" "0")
         saved_Z2K_AUTO_UPDATE_ENABLED=$(safe_config_read "Z2K_AUTO_UPDATE_ENABLED" "$config_file" "1")
         saved_Z2K_WARP_TRANSPORT=$(safe_config_read "Z2K_WARP_TRANSPORT" "$config_file" "auto")
@@ -2481,6 +2503,9 @@ Z2K_FASTROUTE_OFF=${saved_Z2K_FASTROUTE_OFF}
 # заворачиваются на резолвер роутера (nat REDIRECT :53), иначе провайдер
 # подменяет ответы на заблокированные имена. 0 — не заворачивать. Тумблер в панели.
 Z2K_DNS_REDIRECT=${saved_Z2K_DNS_REDIRECT}
+# Обход обрыва на 16 КБ (подстановка белого имени по сети, см. state/tcp16_*).
+# 0 — выключить механизм, даже если проба нашла блок.
+Z2K_SNI_STALL=${saved_Z2K_SNI_STALL}
 Z2K_PANEL_AUTH=${saved_Z2K_PANEL_AUTH}
 Z2K_AUTO_UPDATE_ENABLED=${saved_Z2K_AUTO_UPDATE_ENABLED}
 Z2K_WARP_TRANSPORT=${saved_Z2K_WARP_TRANSPORT}
