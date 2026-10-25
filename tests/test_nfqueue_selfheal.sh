@@ -24,6 +24,7 @@ cat > "$INIT" <<EOF
     echo x >> "$CNT"
     [ -n "\${REPAIR_MARKER:-}" ] && : > "\$REPAIR_MARKER"
 }
+[ "\$1" = restart ] && echo r >> "$CNT.restart"
 exit 0
 EOF
 chmod +x "$INIT"
@@ -361,6 +362,33 @@ reset; printf '1\n' > "$SYS/nf_conntrack_fastnat"
 RULES="$OK6" PIDOF_OK=0 NF_SYSCTL_DIR="$SYS" run
 v=$(cat "$SYS/nf_conntrack_fastnat"); [ "$v" = 1 ] && ok "nfqws2 down -> fastnat не трогаем" || no "fastnat untouched when down" 1 "$v"
 reset
+
+# --- Сторож движка: мёртвый pid в pid-файле / паника Lua -> restart ----------
+# Штатная остановка pid-файл удаляет, падение — оставляет. Живой демон без
+# паники — ни одного restart; повтор в пределах WD_COOLDOWN — ни одного.
+restarts() { [ -f "$CNT.restart" ] && wc -l < "$CNT.restart" | tr -d ' ' || echo 0; }
+WD_LAST="$TMP/wd.last"; WD_ERR_DIR="$TMP/err"; mkdir -p "$WD_ERR_DIR"
+export WD_LAST WD_ERR_DIR WD_COOLDOWN=60 WD_EXE_CHECK=0
+: > "$CNT.restart"; rm -f "$WD_LAST" "$TMP"/run/*.pid
+NFQ=2 run
+[ "$(restarts)" = 0 ] && ok "сторож: нет pid-файлов -> нет перезапуска" || no "watchdog: no pidfiles" 0 "$(restarts)"
+echo 4194300 > "$TMP/run/nfqws2_1.pid"      # pid, которого нет
+NFQ=2 run
+[ "$(restarts)" = 1 ] && ok "сторож: мёртвый pid в pid-файле -> restart" || no "watchdog: dead pid" 1 "$(restarts)"
+[ -s "$WD_LAST" ] && ok "сторож: отметка времени перезапуска записана" || no "watchdog: WD_LAST" present absent
+NFQ=2 run
+[ "$(restarts)" = 1 ] && ok "сторож: повтор внутри cooldown -> без перезапуска" || no "watchdog: cooldown" 1 "$(restarts)"
+grep -q 'перезапуск был' "$LOG" && ok "сторож: ожидание cooldown записано в журнал" || no "watchdog: cooldown logged" yes no
+rm -f "$WD_LAST"
+echo $$ > "$TMP/run/nfqws2_1.pid"           # живой pid (сам тест)
+NFQ=2 run
+[ "$(restarts)" = 1 ] && ok "сторож: живой демон без паники -> без перезапуска" || no "watchdog: alive" 1 "$(restarts)"
+printf 'nfqws2: LUA PANIC: not enough memory\n' > "$WD_ERR_DIR/.z2k-daemon-nfqws2-1.err"
+NFQ=2 run
+[ "$(restarts)" = 2 ] && ok "сторож: LUA PANIC в stderr живого демона -> restart" || no "watchdog: lua panic" 2 "$(restarts)"
+grep -q 'LUA PANIC' "$LOG" && ok "сторож: причина перезапуска в журнале" || no "watchdog: reason logged" yes no
+rm -f "$WD_ERR_DIR/.z2k-daemon-nfqws2-1.err" "$TMP"/run/*.pid "$WD_LAST"
+unset WD_LAST WD_ERR_DIR WD_COOLDOWN WD_EXE_CHECK
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

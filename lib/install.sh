@@ -538,7 +538,7 @@ step_update_packages() {
             print_info "Это часто связано с блокировкой РКН репозитория bin.entware.net"
             print_separator
 
-            # Попытка переключения на альтернативное зеркало (метод от zapret4rocket)
+            # Попытка переключения на альтернативное зеркало
             print_info "Попытка переключения на альтернативное зеркало Entware..."
 
             local current_mirror
@@ -2643,9 +2643,9 @@ TMPJUNK
     # ===========================================================================
     # ШАГ 4.6: Инициализация autocircular cache (state.tsv, telemetry.tsv)
     # ===========================================================================
-    # Ранее тут качались orchestra/locked.lua + orchestra/orchestrator.sh
-    # из AloofLibra/zapret4rocket. orchestrator.sh удалён upstream'ом 2026-05-07,
-    # locked.lua осиротел. Discord UDP теперь использует наш `circular` с
+    # Ранее тут качались сторонние orchestra/locked.lua + orchestra/orchestrator.sh.
+    # orchestrator.sh удалён их автором 2026-05-07, locked.lua осиротел.
+    # Discord UDP теперь использует наш `circular` с
     # `allow_nohost=1` (см. PLAN_orchestrator_replacement.md, B1).
 
     mkdir -p "${ZAPRET2_DIR}/lua"
@@ -4095,8 +4095,8 @@ step_finalize() {
     fi
     rm -f "${ZAPRET2_DIR}/z2k-discord-voice-pin.sh" \
           "${ZAPRET2_DIR}/lists/flowseal_discord_voice_hosts.txt" 2>/dev/null || true
-    # Снимок onetrust снят 23.10.2026 (Flowseal 1.10.4 заменил его на sferum,
-    # у нас он ни одним плечом больше не упоминается). Файл на роутере
+    # Снимок onetrust снят 23.10.2026 (выгорел, заменён на sferum, у нас он
+    # ни одним плечом больше не упоминается). Файл на роутере
     # безвреден, но и возить мёртвый груз незачем.
     rm -f "${ZAPRET2_DIR}/files/fake/tls_clienthello_www_onetrust_com.bin" 2>/dev/null || true
 

@@ -75,6 +75,57 @@ log() {
 # feature enabled by the user
 grep -q '^ENABLED=1' "$ZAPRET_CONFIG" 2>/dev/null || exit 0
 
+# --- Сторож движка (25.10.2026) ----------------------------------------------
+# До этого самолечение чинило только ПРАВИЛА: мёртвый демон означал тихий выход
+# (ниже `is_nfqws2_running || exit 0`), и роутер стоял без обхода до ручного
+# перезапуска. Штатная остановка удаляет pid-файлы (S99 stop), падение оставляет
+# pid-файл с мёртвым pid — по этому признаку падение и отличается от выключения.
+# Второй признак — паника Lua или нехватка памяти в stderr демона
+# (/tmp/.z2k-daemon-nfqws2-<id>.err, см. z2k_daemon_err_file в S99): такой демон
+# может ещё числиться живым, но обход уже не ведёт. Перезапуск не чаще раза в
+# WD_COOLDOWN секунд: сторож
+# ходит каждую минуту, а падающий в цикле демон не должен превращаться в шторм.
+WD_LAST="${WD_LAST:-/tmp/zapret2-daemon-watchdog.last}"
+WD_COOLDOWN="${WD_COOLDOWN:-60}"
+WD_ERR_DIR="${WD_ERR_DIR:-/tmp}"
+# Сверка exe по /proc: переиспользованный чужим процессом pid «живым» не считать.
+# В тестах выключается: там в pid-файле лежит pid самого теста.
+WD_EXE_CHECK="${WD_EXE_CHECK:-1}"
+daemon_watchdog() {
+    local pidfile pid exe err id reason="" now last
+    for pidfile in $NFQWS2_PIDFILES; do
+        [ -f "$pidfile" ] || continue
+        pid=$(cat "$pidfile" 2>/dev/null)
+        case "$pid" in ''|*[!0-9]*) continue ;; esac
+        if ! kill -0 "$pid" 2>/dev/null; then
+            reason="pid $pid из $pidfile мёртв"
+        elif [ "$WD_EXE_CHECK" = 1 ]; then
+            exe=$(readlink "/proc/$pid/exe" 2>/dev/null)
+            case "$exe" in ''|*nfqws2*) ;; *) reason="pid $pid из $pidfile занят другим процессом: $exe" ;; esac
+        fi
+        if [ -z "$reason" ]; then
+            id=$(basename "$pidfile" .pid); id=${id#nfqws2_}
+            err="$WD_ERR_DIR/.z2k-daemon-nfqws2-$id.err"
+            if [ -s "$err" ] && grep -q -E 'LUA PANIC|not enough memory' "$err" 2>/dev/null; then
+                reason="в $err: $(grep -m1 -E 'LUA PANIC|not enough memory' "$err" | cut -c1-120)"
+            fi
+        fi
+        [ -n "$reason" ] && break
+    done
+    [ -n "$reason" ] || return 1
+    now=$(date +%s 2>/dev/null || echo 0)
+    last=$(cat "$WD_LAST" 2>/dev/null); case "$last" in ''|*[!0-9]*) last=0 ;; esac
+    if [ $((now - last)) -lt "$WD_COOLDOWN" ]; then
+        log "движок мёртв ($reason), перезапуск был $((now - last)) с назад — жду"
+        return 0
+    fi
+    printf '%s' "$now" > "$WD_LAST" 2>/dev/null
+    log "движок мёртв: $reason — перезапускаю службу"
+    "$INIT_SCRIPT" restart >/dev/null 2>&1
+    return 0
+}
+daemon_watchdog && exit 0
+
 # nfqws2 actually running — else re-applying would queue traffic to a dead
 # consumer (same guard the netfilter.d hook uses).
 is_nfqws2_running() {

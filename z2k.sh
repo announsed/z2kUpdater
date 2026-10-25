@@ -929,7 +929,7 @@ z2k_fetch() {
     # ЧЕТВЁРТЫЙ СЛОЙ (ndmc "ip host") УБРАН 30.08.2026.
     #
     # Он писал ПОСТОЯННЫЕ записи в конфиг роутера пользователя. Приём был
-    # скопирован из чужого проекта (zapret4rocket) коммитом f4897e2 от 23.04,
+    # скопирован из стороннего проекта коммитом f4897e2 от 23.04,
     # и в описании того коммита прямым текстом стоит «not tested».
     #
     # На поле это дало помойку: у GitHub много адресов, CDN отдаёт разные, и
@@ -1382,7 +1382,7 @@ download_init_script() {
         die "Ошибка загрузки files/lua/z2k-fooling-ext.lua"
     fi
 
-    # badseq-фулинг и hostfakesplit altorder=1 из winws (Flowseal); стратегии
+    # badseq-фулинг и hostfakesplit altorder=1 из winws; стратегии
     # ссылаются на них аргументами, модуль обязан лечь до старта движка.
     url="${GITHUB_RAW}/files/lua/z2k-nfqws1-compat.lua"
     output="${lua_dir}/z2k-nfqws1-compat.lua"

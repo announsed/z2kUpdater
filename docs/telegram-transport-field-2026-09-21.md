@@ -38,7 +38,7 @@ Sources checked:
 - [Telegram TCP/WebSocket transports](https://core.telegram.org/mtproto/transports).
 - [Official Telegram CIDRs](https://core.telegram.org/resources/cidr.txt).
 - [Telegram calls and session connection options](https://core.telegram.org/api/calls).
-- [Reference manager](https://github.com/StressOzz/tg-ws-proxy-Manager); implementation comparison is in `telegram-reference-comparison-2026-09-21.md`.
+- Reference manager; implementation comparison is in `telegram-reference-comparison-2026-09-21.md`.
 - [Upstream signature-based STUN example](https://github.com/bol-van/zapret2/blob/master/init.d/custom.d.examples.linux/50-stun4all).
 
 ## Verification and recovery

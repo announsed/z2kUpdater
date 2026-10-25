@@ -13,8 +13,7 @@
 #   macOS:   sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
 #
 # IP 104.25.158.178 — рабочий Cloudflare-эдж. Со временем может смениться:
-# если голос снова отвалился — обновите список (актуальный держит проект
-# Flowseal/zapret-discord-youtube, кнопка "Update hosts file (for discord voice)").
+# если голос снова отвалился — обновите список из репозитория z2k.
 #
 104.25.158.178 finland10000.discord.media
 104.25.158.178 finland10001.discord.media

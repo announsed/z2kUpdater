@@ -209,10 +209,10 @@ generate_nfqws2_opt_from_strategies() {
     if [ -z "$_cs" ] && [ -f "${extra_strats_dir}/UDP/YT/Strategy.txt" ]; then
         quic_udp=$(z2k_read_pool_strategy "${extra_strats_dir}/UDP/YT/Strategy.txt") || return 1
     fi
-    # Discord TCP profiles from zapret4rocket are absent; disable dedicated TCP Discord profile.
+    # Dedicated TCP Discord profile is disabled: no TCP-side Discord strategies in the pool.
     local discord_tcp_block=""
 
-    # Discord UDP (z2k autocircular on the zapret4rocket primitive family).
+    # Discord UDP (z2k autocircular on the fake-blob primitive family).
     # ПО КАНОНУ bol-van: голос+стрим пробиваются МАЛЕНЬКИМ cutoff на старте флоу
     # + connbytes, а НЕ непрерывным фейком. --out-range=-d4 = фейк только на
     # первые 4 data-пакета каждого флоу (#1267: "n2 или d2 лучше всего"; тугой
@@ -224,9 +224,9 @@ generate_nfqws2_opt_from_strategies() {
     # --payload=discord_ip_discovery,stun — гейтим именно discovery/STUN-сигнатуры
     # (не quic_initial — то для QUIC/443, не для голоса). БЕЗ keepalive (см.
     # NFQWS2_PORTS_UDP_KEEPALIVE ниже — отключён по этой же причине).
-    # Пул — на блобе quic_dbankcloud (порт z4r); снимок ACTIVE_DISCORD_UDP от
-    # Flowseal, добавленный 26.08.2026, снят 10.09.2026 по решению Марка —
-    # чужие блобы не берём, очередь вернулась к прежней шестёрке.
+    # Пул — на блобе quic_dbankcloud; сторонний снимок ACTIVE_DISCORD_UDP,
+    # добавленный 26.08.2026, снят 10.09.2026 по решению Марка —
+    # очередь вернулась к прежней шестёрке.
     # strategy=1 = базовый fake quic_dbankcloud repeats=10 (рычаг bol-van против
     # просадки голоса — "поиграться репитами" #6915; 10 = рабочий референс юзера);
     # 2-6 — fallback'и (разные repeats/ttl) для circular-перебора, все под d4-cutoff.
@@ -1650,7 +1650,7 @@ generate_nfqws2_opt_from_strategies() {
     # Strategy 3: hostfakesplit with TTL=2
     # Strategy 4: fake with badsum
     # Strategy 5: fakedsplit at method+2 with badsum
-    # Strategy 6: z4r original (fake 0x0E + tcp_md5 + multisplit host+1)
+    # Strategy 6: reference original (fake 0x0E + tcp_md5 + multisplit host+1)
     # Strategy 7: fake badsum + multisplit method+2
     # Тот же набор списков, что у TLS-профиля, минус Discord (см. сборку выше).
     # Отдельного второго сборщика здесь больше нет — именно он и разъезжался.

@@ -529,7 +529,7 @@ Telegram работает для всех устройств в сети авт�
 - Linux: `sudo resolvectl flush-caches`
 - macOS: `sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder`
 
-Адрес `104.25.158.178` со временем может смениться. Если голос снова отвалился — скачайте список заново (свежий держит проект `Flowseal/zapret-discord-youtube`, кнопка «Update hosts file»).
+Адрес `104.25.158.178` со временем может смениться. Если голос снова отвалился — скачайте список заново из репозитория z2k (`extras/discord-voice-hosts.txt`).
 
 ---
 
