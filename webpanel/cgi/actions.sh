@@ -1288,11 +1288,11 @@ toggle_dns_redirect() {
     [ -r "${Z2K_DNS_REDIRECT_LIB:-/opt/zapret2/z2k-dns-redirect.sh}" ] || return 0
     if [ "$want" = "1" ]; then
         ( . "${Z2K_DNS_REDIRECT_LIB:-/opt/zapret2/z2k-dns-redirect.sh}" && z2k_dns_ensure_rules ) || {
-            echo "Правила не поставлены: резолвер роутера не слушает порт 53 или iptables занят. Флаг сохранён, правила вернёт перезапуск службы." >&2
+            echo "Правила не поставлены: резолвер роутера не слушает порт 53, не отвечает или iptables занят. Флаг сохранён; когда резолвер ответит, правила вернёт ежеминутная проверка." >&2
             return 1
         }
     else
-        ( . "${Z2K_DNS_REDIRECT_LIB:-/opt/zapret2/z2k-dns-redirect.sh}" && z2k_dns_remove_rules ) >/dev/null 2>&1
+        ( . "${Z2K_DNS_REDIRECT_LIB:-/opt/zapret2/z2k-dns-redirect.sh}" && z2k_dns_remove_rules && z2k_dns_reset_health ) >/dev/null 2>&1
     fi
 }
 

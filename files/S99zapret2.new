@@ -1903,7 +1903,7 @@ _z2k_dns_redirect_apply()
     [ -r "$ZAPRET_BASE/z2k-dns-redirect.sh" ] || return 0
     . "$ZAPRET_BASE/z2k-dns-redirect.sh"
     if z2k_dns_enabled; then
-        z2k_dns_ensure_rules || echo "WARNING: DNS redirect rules not applied (resolver on :53 absent or iptables busy)"
+        z2k_dns_ensure_rules || echo "WARNING: DNS redirect rules not applied (router resolver absent, not answering, or iptables busy)"
     else
         z2k_dns_remove_rules
     fi
