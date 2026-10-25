@@ -510,30 +510,6 @@ Telegram работает для всех устройств в сети авт�
 - **Клиенты WDTT** — отдельный выключенный по умолчанию переключатель направляет весь трафик клиентов, прошедший декапсуляцию на интерфейсе `wdtt0`, через WARP. Внешнее соединение самого WDTT-туннеля не затрагивается. Опция действует при включённом WARP и наличии `wdtt0`; при выключении WARP его маршрут снимается.
 - Интерфейс туннеля — `z2ktunN`; в веб-интерфейсе Keenetic он не показывается и с чужими туннелями (`opkgtunN`) не конфликтует.
 
-## Discord — голосовые каналы (фикс на ПК)
-
-Веб и текст Discord z2k тянет на роутере сам. А вот **голос** иногда виснет на «Connecting» — провайдер душит финские голосовые серверы Discord. На уровне роутера это не лечится (нужно было бы ~200 DNS-записей — почти весь лимит Keenetic), поэтому фикс делается **на самом ПК**: пином финского диапазона в hosts-файл на рабочий Cloudflare-адрес.
-
-**Готовый список** (200 строк `finlandNNNNN.discord.media` → `104.25.158.178`):
-
-- скачать: `https://cdn.jsdelivr.net/gh/necronicle/z2k@z2k-enhanced/extras/discord-voice-hosts.txt`
-- зеркало: `https://raw.githubusercontent.com/necronicle/z2k/z2k-enhanced/extras/discord-voice-hosts.txt`
-
-**Куда добавить** (строки из файла — в конец системного hosts):
-
-- **Windows:** `C:\Windows\System32\drivers\etc\hosts` — открыть Блокнотом **от имени администратора**.
-- **Linux / macOS:** `/etc/hosts` — через `sudo`.
-
-**После правки** — сбросить DNS-кэш и перезапустить Discord:
-
-- Windows: `ipconfig /flushdns`
-- Linux: `sudo resolvectl flush-caches`
-- macOS: `sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder`
-
-Адрес `104.25.158.178` со временем может смениться. Если голос снова отвалился — скачайте список заново из репозитория z2k (`extras/discord-voice-hosts.txt`).
-
----
-
 ## Защита DNS
 
 Провайдер подменяет ответы обычного, незашифрованного DNS. Замер 25.10.2026 на
@@ -764,7 +740,6 @@ z2k/
 ├── rt-proxy/                   # Прокси для RuTracker (Go)
 ├── vps-relay/                  # Серверный релей туннелей (Go)
 ├── vps/                        # Эксплуатация узла релея: модель, сверка, раскатка, регламент (vps/README.md)
-├── extras/                     # discord-voice-hosts.txt и прочие вспомогательные файлы
 ├── UPDATES.json                # Манифест обновлений: версии + sha256 каждого файла
 ├── mtproxy-client/             # Telegram tunnel (Go)
 │   ├── main.go                 # Entry point
