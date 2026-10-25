@@ -2,7 +2,8 @@
 # tests/test_state_pool_renumber_migration.sh
 #
 # 23.10.2026: rkn_tcp потерял плечи 10/40/45/46 и получил три новых на 12–14
-# (53), yt_tcp и gv_tcp получили восемь новых на 12–19 (30). state.tsv хранит
+# (53), yt_tcp и gv_tcp получили восемь новых на 12–19, 25.10 ещё три на 2–4
+# (33). state.tsv хранит
 # НОМЕР плеча, поэтому init переносит номера по полной таблице до подъёма
 # демона. Проверяем таблицу на границах, стирание снятых плеч, слитый ключ
 # google_tls, голосовой пул (25.10: авто стирается, замороженное переносится),
@@ -42,6 +43,8 @@ printf 'rkn_tcp\tshift44.example|4\t44\t100\tauto\t\n'
 printf 'rkn_tcp\tgone46.example|4\t46\t100\tauto\t\n'
 printf 'rkn_tcp\tshift47.example|4\t47\t100\tauto\t\n'
 printf 'rkn_tcp\tlast50.example|4\t50\t100\tauto\t\n'
+printf 'yt_tcp\tyt1.example|4\t1\t100\tauto\t\n'
+printf 'yt_tcp\tyt2.example|4\t2\t100\tauto\t\n'
 printf 'yt_tcp\tyt11.example|4\t11\t100\tauto\t\n'
 printf 'yt_tcp\tyt12.example|4\t12\t100\tauto\t\n'
 printf 'gv_tcp\tgv22.example|4\t22\t100\tfrozen\tgv22.example\n'
@@ -70,12 +73,14 @@ check "rkn 44 -> 51"                          rkn_tcp 'shift44.example|4' 51
 check "rkn 46 (removed) row erased"           rkn_tcp 'gone46.example|4'  ABSENT
 check "rkn 47 -> 52"                          rkn_tcp 'shift47.example|4' 52
 check "rkn 50 -> 55"                          rkn_tcp 'last50.example|4'  55
-check "yt 11 stays 11"                        yt_tcp  'yt11.example|4'    11
-check "yt 12 -> 20 (eight inserted)"          yt_tcp  'yt12.example|4'    20
-check "gv 22 -> 30"                           gv_tcp  'gv22.example|4'    30
-check "google_tls yt part 22 -> 30"           google_tls 'merged-yt22.example|4' 30
-check "google_tls gv part 23 (gv 1) -> 31"    google_tls 'merged-gv1.example|4'  31
-check "google_tls gv part 44 (gv 22) -> 60"   google_tls 'merged-gv22.example|4' 60
+check "yt 1 stays 1"                          yt_tcp  'yt1.example|4'     1
+check "yt 2 -> 5 (three inserted at 2-4)"     yt_tcp  'yt2.example|4'     5
+check "yt 11 -> 14"                           yt_tcp  'yt11.example|4'    14
+check "yt 12 -> 23 (eight + three inserted)"  yt_tcp  'yt12.example|4'    23
+check "gv 22 -> 33"                           gv_tcp  'gv22.example|4'    33
+check "google_tls yt part 22 -> 33"           google_tls 'merged-yt22.example|4' 33
+check "google_tls gv part 23 (gv 1) -> 34"    google_tls 'merged-gv1.example|4'  34
+check "google_tls gv part 44 (gv 22) -> 66"   google_tls 'merged-gv22.example|4' 66
 check "quic row untouched"                    quic    'quic.example|4'    7
 check "discord auto row erased (new blob, start from 1)" discord_udp nohost ABSENT
 check "discord frozen 1 -> 2"                discord_udp voice-frozen1 2
@@ -114,7 +119,9 @@ if [ -f "$ZAPRET_BASE/state/pool-renumber-v1.done" ]; then ok "marker after full
 rkn_max=$(grep 'key=rkn_tcp' "$ROOT/strats_new2.txt" | grep -o ':strategy=[0-9]*' | sed 's/.*=//' | sort -n | tail -1)
 yt_max=$(grep 'key=yt_tcp' "$ROOT/strats_new2.txt" | grep -o ':strategy=[0-9]*' | sed 's/.*=//' | sort -n | tail -1)
 [ "$rkn_max" = 55 ] && ok "rkn pool has 55 arms" || no "rkn pool has 55 arms (got $rkn_max)"
-[ "$yt_max" = 30 ] && ok "yt pool has 30 arms" || no "yt pool has 30 arms (got $yt_max)"
+[ "$yt_max" = 33 ] && ok "yt pool has 33 arms" || no "yt pool has 33 arms (got $yt_max)"
+gv_max=$(grep 'key=gv_tcp' "$ROOT/strats_new2.txt" | grep -o ':strategy=[0-9]*' | sed 's/.*=//' | sort -n | tail -1)
+[ "$gv_max" = 33 ] && ok "gv pool has 33 arms" || no "gv pool has 33 arms (got $gv_max)"
 
 printf 'PASSED: %s\nFAILED: %s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

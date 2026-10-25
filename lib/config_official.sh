@@ -1580,7 +1580,7 @@ generate_nfqws2_opt_from_strategies() {
     if [ "$Z2K_REFACTOR_PHASE3" = "1" ]; then
         local youtube_gv_rebased yt_last_slot
         yt_last_slot=$(printf '%s' "$youtube_tcp" | grep -o ':strategy=[0-9]*' | sed 's/.*=//' | sort -n | tail -1)
-        [ -n "$yt_last_slot" ] || yt_last_slot=30
+        [ -n "$yt_last_slot" ] || yt_last_slot=33
         youtube_gv_rebased=$(rebase_strategy_ids "$youtube_gv_tcp" "$yt_last_slot")
         # Extract ONLY non-circular --lua-desync=* tokens from GV.
         # Global options (--filter-tcp, --filter-l7, --payload, --out-range,

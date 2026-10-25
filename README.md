@@ -66,8 +66,8 @@ z2k — модульный установщик zapret2 для роутеров 
 - Установка zapret2 (openwrt-embedded релиз) без компиляции, с проверкой работоспособности `nfqws2`
 - Три TCP autocircular профиля с разными стратегиями:
   - **RKN** — список ресурсов (TCP/TLS + HTTP) — 55 стратегий
-  - **YouTube TCP** — youtube.com и связанные домены — 30 стратегий
-  - **YouTube GV** — googlevideo CDN (стриминг) — 30 стратегий
+  - **YouTube TCP** — youtube.com и связанные домены — 33 стратегии
+  - **YouTube GV** — googlevideo CDN (стриминг) — 33 стратегии
 - Защита DNS: открытые DNS-запросы устройств к внешним серверам заворачиваются на резолвер роутера, подмена ответов провайдером не доходит до устройств
 - QUIC autocircular профили: YouTube QUIC (UDP/443) и Discord voice — с z2k morph-стратегиями (QUIC morph / timing morph)
 - Discord профили:
