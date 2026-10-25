@@ -114,8 +114,8 @@ H.test('a success on another domain cannot reset this domain failures',function(
     H.eq(2,h.failure_counter)
 end)
 H.test('previously unprotected TCP fakes carry an invalid checksum',function()
-    -- Номера после перенумерации 23.10.2026 (rkn 38 -> 40, yt/gv 18 -> 26).
-    for key,num in pairs({rkn_tcp='40',yt_tcp='26',gv_tcp='26'}) do
+    -- Номера после перенумерации 23.10.2026 (rkn 38 -> 44, yt/gv 18 -> 26).
+    for key,num in pairs({rkn_tcp='44',yt_tcp='26',gv_tcp='26'}) do
         local checked=false
         for _,ins in ipairs(all[key]) do
             if ins.func=='fake' and ins.arg.strategy==num then

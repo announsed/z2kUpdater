@@ -2,7 +2,7 @@
 # tests/test_state_pool_renumber_migration.sh
 #
 # 23.10.2026: rkn_tcp потерял плечи 10/40/45/46 и получил три новых на 12–14
-# (49), yt_tcp и gv_tcp получили восемь новых на 12–19 (30). state.tsv хранит
+# (53), yt_tcp и gv_tcp получили восемь новых на 12–19 (30). state.tsv хранит
 # НОМЕР плеча, поэтому init переносит номера по полной таблице до подъёма
 # демона. Проверяем таблицу на границах, стирание снятых плеч, слитый ключ
 # google_tls, запасной файл в tmpfs, снимок до переноса, идемпотентность и
@@ -59,13 +59,13 @@ check "rkn 5 stays 5"                         rkn_tcp 'keep5.example|4'   5
 check "rkn 9 stays 9"                         rkn_tcp 'keep9.example|4'   9
 check "rkn 10 (removed) row erased"           rkn_tcp 'gone10.example|4'  ABSENT
 check "rkn 11 -> 10"                          rkn_tcp 'shift11.example|4' 10
-check "rkn 13 -> 15 (three inserted)"         rkn_tcp 'shift13.example|4' 15
-check "rkn 24 -> 26"                          rkn_tcp 'shift24.example|4' 26
+check "rkn 13 -> 19 (seven inserted)"         rkn_tcp 'shift13.example|4' 19
+check "rkn 24 -> 30"                          rkn_tcp 'shift24.example|4' 30
 check "rkn 40 (removed) row erased"           rkn_tcp 'gone40.example|4'  ABSENT
-check "rkn 44 -> 45"                          rkn_tcp 'shift44.example|4' 45
+check "rkn 44 -> 49"                          rkn_tcp 'shift44.example|4' 49
 check "rkn 46 (removed) row erased"           rkn_tcp 'gone46.example|4'  ABSENT
-check "rkn 47 -> 46"                          rkn_tcp 'shift47.example|4' 46
-check "rkn 50 -> 49"                          rkn_tcp 'last50.example|4'  49
+check "rkn 47 -> 50"                          rkn_tcp 'shift47.example|4' 50
+check "rkn 50 -> 53"                          rkn_tcp 'last50.example|4'  53
 check "yt 11 stays 11"                        yt_tcp  'yt11.example|4'    11
 check "yt 12 -> 20 (eight inserted)"          yt_tcp  'yt12.example|4'    20
 check "gv 22 -> 30"                           gv_tcp  'gv22.example|4'    30
@@ -76,7 +76,7 @@ check "quic row untouched"                    quic    'quic.example|4'    7
 check "discord row untouched"                 discord_udp nohost 4
 if awk -F'\t' '$2=="shift13.example|4" && $5=="frozen" && $6=="shift13.example" {f=1} END{exit !f}' "$STATE"; then ok "frozen mode and sni preserved"; else no "frozen mode and sni preserved"; fi
 if [ "$(head -2 "$STATE" | grep -c '^#')" = 2 ]; then ok "header comments kept"; else no "header comments kept"; fi
-if awk -F'\t' '$2=="fb.example|4" && $3==26 {f=1} END{exit !f}' "$Z2K_STATE_FALLBACK"; then ok "fallback file in tmpfs migrated too"; else no "fallback file in tmpfs migrated too"; fi
+if awk -F'\t' '$2=="fb.example|4" && $3==30 {f=1} END{exit !f}' "$Z2K_STATE_FALLBACK"; then ok "fallback file in tmpfs migrated too"; else no "fallback file in tmpfs migrated too"; fi
 if cmp -s "$TMP/original" "$STATE.pre-renumber-v1"; then ok "pre-migration snapshot kept"; else no "pre-migration snapshot kept"; fi
 if [ -f "$ZAPRET_BASE/state/pool-renumber-v1.done" ]; then ok "done marker written"; else no "done marker written"; fi
 if [ ! -e "$STATE.lock" ]; then ok "lock released"; else no "lock released"; fi
@@ -100,13 +100,13 @@ if [ -f "$STATE.lock" ]; then ok "foreign lock: lock left to its owner"; else no
 rm -f "$STATE.lock"
 _z2k_migrate_pool_renumber_v1
 if cmp -s "$TMP/once" "$STATE"; then ok "retry after lock release migrates"; else no "retry after lock release migrates"; fi
-if awk -F'\t' '$2=="fb.example|4" && $3==26 {f=1} END{exit !f}' "$Z2K_STATE_FALLBACK"; then ok "fallback not migrated twice"; else no "fallback not migrated twice"; fi
+if awk -F'\t' '$2=="fb.example|4" && $3==30 {f=1} END{exit !f}' "$Z2K_STATE_FALLBACK"; then ok "fallback not migrated twice"; else no "fallback not migrated twice"; fi
 if [ -f "$ZAPRET_BASE/state/pool-renumber-v1.done" ]; then ok "marker after full retry"; else no "marker after full retry"; fi
 
 # Таблицы в init обязаны соответствовать реальным пулам: максимум номера.
 rkn_max=$(grep 'key=rkn_tcp' "$ROOT/strats_new2.txt" | grep -o ':strategy=[0-9]*' | sed 's/.*=//' | sort -n | tail -1)
 yt_max=$(grep 'key=yt_tcp' "$ROOT/strats_new2.txt" | grep -o ':strategy=[0-9]*' | sed 's/.*=//' | sort -n | tail -1)
-[ "$rkn_max" = 49 ] && ok "rkn pool has 49 arms" || no "rkn pool has 49 arms (got $rkn_max)"
+[ "$rkn_max" = 53 ] && ok "rkn pool has 53 arms" || no "rkn pool has 53 arms (got $rkn_max)"
 [ "$yt_max" = 30 ] && ok "yt pool has 30 arms" || no "yt pool has 30 arms (got $yt_max)"
 
 printf 'PASSED: %s\nFAILED: %s\n' "$PASS" "$FAIL"
