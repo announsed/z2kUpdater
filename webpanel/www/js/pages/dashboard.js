@@ -188,10 +188,12 @@ export function tcp16Line(t) {
     return { text: "Прошлая проба оборвалась — повторится в ближайшие минуты", kind: "warn" };
   }
   if (t.measured === "1") {
-    const head = `Блок есть, проверено ${ago(t.age)}: сетей с обрывом ${t.nets_blocked}, имён подобрано ${t.names}`;
+    // Сколько сетей ИМЕЮТ обход, а не сколько имён в карте: имён бывало
+    // больше, чем сетей, и такая строка читалась как ошибка (Марк, 25.10.2026).
+    const head = `Блок есть, проверено ${ago(t.age)}: обход есть у ${t.nets_bypassed} сетей из ${t.nets_blocked}`;
     return t.in_config
-      ? { text: `${head}, обход включён`, kind: "warn" }
-      : { text: `${head}, но обход в конфиг не попал`, kind: "bad" };
+      ? { text: `${head}, включён`, kind: "warn" }
+      : { text: `${head}, но в конфиг не попал`, kind: "bad" };
   }
   if (t.measured === "0") return { text: `Блока нет, проверено ${ago(t.age)}`, kind: "good" };
   return { text: "Линия ещё не проверялась", kind: "" };

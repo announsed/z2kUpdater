@@ -2813,14 +2813,17 @@ diag_is_complete() {
 _tcp16_count() {
     awk '!/^#/ && NF {n++} END {print n + 0}' "$1" 2>/dev/null || echo 0
 }
-# Сетей, у которых имя ЕСТЬ: строки карты, чья AS значится в списке сетей с
-# блоком. Прежде печаталось просто число строк карты, а это разные множества —
-# и карта могла нести имена сетей без блока (рантайм их не применяет), завышая
-# покрытие (ревью 25.10.2026).
-_tcp16_named() {
+# СКОЛЬКО СЕТЕЙ ИМЕЮТ ОБХОД — а не сколько строк в карте имён.
+#
+# Карта может нести имена сетей, где блока уже нет (рантайм их не применит),
+# и, в старых или правленых руками файлах, повторы одной сети. Поэтому в
+# панели показывалось «имён подобрано» больше, чем «сетей с обрывом» (Марк,
+# 25.10.2026). Считаем РАЗНЫЕ AS из списка сетей с блоком, у которых в карте
+# есть имя: это и есть число сетей, на которых обход работает.
+_tcp16_bypassed() {
     awk -F'\t' '
         FILENAME == ARGV[1] { if ($1 ~ /^[0-9]+$/) want[$1] = 1; next }
-        $1 ~ /^[0-9]+$/ && $2 != "" && want[$1] { n++ }
+        $1 ~ /^[0-9]+$/ && $2 != "" && want[$1] && !seen[$1]++ { n++ }
         END { print n + 0 }
     ' "${ZAPRET2_DIR}/state/tcp16_asn.txt" "${ZAPRET2_DIR}/state/tcp16_sni.txt" 2>/dev/null || echo 0
 }
@@ -2864,7 +2867,7 @@ tcp16_status_json() {
     printf '{"ok":true,"measured":'; json_string "$f"
     printf ',"age":%s' "${age:-null}"
     printf ',"nets_blocked":%s' "$(_tcp16_count "${ZAPRET2_DIR}/state/tcp16_asn.txt")"
-    printf ',"names":%s' "$(_tcp16_named)"
+    printf ',"nets_bypassed":%s' "$(_tcp16_bypassed)"
     printf ',"candidates":%s' "$(_tcp16_count "${ZAPRET2_DIR}/lists/sni_wl_candidates.txt")"
     printf ',"in_config":%s,"running":%s,"stale":%s}\n' "$in_cfg" "$running" "$stale"
 }

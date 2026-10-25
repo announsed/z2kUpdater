@@ -31,7 +31,7 @@ mkdir -p "$ZAPRET2_DIR/state" "$ZAPRET2_DIR/lists"
 json_string() { printf '"%s"' "$(printf '%s' "$1" | sed 's/["\\]/\\&/g')"; }
 # Замок пробы — в песочнице: по нему панель и отвечает «идёт».
 Z2K_TCP16_LOCK="$TMP/probe.lock"
-eval "$(sed -n '/^_tcp16_count()/,/^}/p; /^_tcp16_named()/,/^}/p; /^_tcp16_running()/,/^}/p; /^tcp16_status_json()/,/^}/p; /^tcp16_probe_async()/,/^}/p' "$ACT")"
+eval "$(sed -n '/^_tcp16_count()/,/^}/p; /^_tcp16_bypassed()/,/^}/p; /^_tcp16_running()/,/^}/p; /^tcp16_status_json()/,/^}/p; /^tcp16_probe_async()/,/^}/p' "$ACT")"
 probe_lock_on()  { mkdir -p "$Z2K_TCP16_LOCK"; echo $$ > "$Z2K_TCP16_LOCK/pid"; }
 probe_lock_off() { rm -rf "$Z2K_TCP16_LOCK"; }
 probe_lock_off
@@ -45,7 +45,7 @@ printf 'NFQWS2_OPT="--lua-desync=z2k_sni_pick:payload=tls_client_hello"\n' > "$C
 J=$(tcp16_status_json)
 case "$J" in *'"measured":"1"'*) ok "блок найден — measured=1" ;; *) no "measured=1" '"measured":"1"' "$J" ;; esac
 case "$J" in *'"nets_blocked":2'*) ok "сети с блоком считаются без комментариев" ;; *) no "nets_blocked" 2 "$J" ;; esac
-case "$J" in *'"names":1'*) ok "имён подобрано — 1" ;; *) no "names" 1 "$J" ;; esac
+case "$J" in *'"nets_bypassed":1'*) ok "сетей с обходом — 1 из 2" ;; *) no "nets_bypassed" 1 "$J" ;; esac
 case "$J" in *'"candidates":3'*) ok "кандидатов — 3" ;; *) no "candidates" 3 "$J" ;; esac
 case "$J" in *'"in_config":true'*) ok "механизм в конфиге виден" ;; *) no "in_config" true "$J" ;; esac
 _age=$(printf '%s' "$J" | sed -n 's/.*"age":\([0-9]*\).*/\1/p')
@@ -86,14 +86,18 @@ probe_lock_off
 
 # --- 1б. оборванный прогон и честный счёт имён -------------------------------
 printf '# a\n24940\n13335\n' > "$ZAPRET2_DIR/state/tcp16_asn.txt"
-# В карте есть имя сети БЕЗ блока — рантайм его не применит, в счёт не идёт.
-printf '24940\t300.ya.ru\n55555\tchужая.example\n' > "$ZAPRET2_DIR/state/tcp16_sni.txt"
+# В карте имя сети БЕЗ блока (рантайм его не применит) и повтор одной сети —
+# именно так «имён подобрано» выходило больше, чем «сетей с обрывом».
+printf '24940\t300.ya.ru\n55555\tchужая.example\n24940\tповтор.example\n' > "$ZAPRET2_DIR/state/tcp16_sni.txt"
 printf '1\n' > "$ZAPRET2_DIR/state/tcp16.flag"
 _now=$(date +%s)
 printf '%s\n' "$((_now - 7200))" > "$ZAPRET2_DIR/state/tcp16.flag.ts"
 printf '%s\n' "$((_now - 7300))" > "$ZAPRET2_DIR/state/tcp16.flag.started"
 J=$(tcp16_status_json)
-case "$J" in *'"names":1'*) ok "в счёт имён идут только сети с блоком" ;; *) no "names" 1 "$J" ;; esac
+case "$J" in *'"nets_bypassed":1'*) ok "сетей с обходом: только сети с блоком и без повторов" ;; *) no "nets_bypassed" 1 "$J" ;; esac
+_nb=$(printf '%s' "$J" | sed -n 's/.*"nets_blocked":\([0-9]*\).*/\1/p')
+_nw=$(printf '%s' "$J" | sed -n 's/.*"nets_bypassed":\([0-9]*\).*/\1/p')
+if [ "${_nw:-99}" -le "${_nb:-0}" ]; then ok "сетей с обходом не больше, чем сетей с обрывом"; else no "обход ≤ обрыв" "$_nb" "$_nw"; fi
 case "$J" in *'"stale":false'*) ok "завершённый прогон — не оборван" ;; *) no "stale" false "$J" ;; esac
 # Начало новее завершения и никто не работает — прогон оборван.
 printf '%s\n' "$((_now - 60))" > "$ZAPRET2_DIR/state/tcp16.flag.started"
@@ -125,17 +129,17 @@ const fs = require("fs");
 const src = fs.readFileSync(process.argv[2], "utf8");
 const tcp16Line = new Function(src + "\nreturn tcp16Line;")();
 const j = (t) => { const l = tcp16Line(t); return l.kind + "|" + l.text; };
-console.log("blocked\t" + j({ measured: "1", age: 5400, nets_blocked: 12, names: 9, in_config: true, running: false }));
-console.log("stale\t" + j({ measured: "1", age: 5400, nets_blocked: 12, names: 0, in_config: false, running: false, stale: true }));
-console.log("blockedNoCfg\t" + j({ measured: "1", age: 60, nets_blocked: 1, names: 0, in_config: false, running: false }));
-console.log("clean\t" + j({ measured: "0", age: 172800, nets_blocked: 0, names: 0, in_config: false, running: false }));
-console.log("never\t" + j({ measured: "", age: null, nets_blocked: 0, names: 0, in_config: false, running: false }));
-console.log("running\t" + j({ measured: "0", age: 10, nets_blocked: 0, names: 0, in_config: false, running: true }));
+console.log("blocked\t" + j({ measured: "1", age: 5400, nets_blocked: 12, nets_bypassed: 9, in_config: true, running: false }));
+console.log("stale\t" + j({ measured: "1", age: 5400, nets_blocked: 12, nets_bypassed: 0, in_config: false, running: false, stale: true }));
+console.log("blockedNoCfg\t" + j({ measured: "1", age: 60, nets_blocked: 1, nets_bypassed: 0, in_config: false, running: false }));
+console.log("clean\t" + j({ measured: "0", age: 172800, nets_blocked: 0, nets_bypassed: 0, in_config: false, running: false }));
+console.log("never\t" + j({ measured: "", age: null, nets_blocked: 0, nets_bypassed: 0, in_config: false, running: false }));
+console.log("running\t" + j({ measured: "0", age: 10, nets_blocked: 0, nets_bypassed: 0, in_config: false, running: true }));
 JS
         R=$(node "$TMP/drive.js" "$TMP/fn.js" 2>&1)
-        case "$R" in *'blocked	warn|Блок есть, проверено 1 ч назад: сетей с обрывом 12, имён подобрано 9, обход включён'*) ok "блок найден: вердикт, давность, сети, имена, обход — одной строкой" ;; *) no "блок найден" "warn|Блок есть…" "$R" ;; esac
+        case "$R" in *'blocked	warn|Блок есть, проверено 1 ч назад: обход есть у 9 сетей из 12, включён'*) ok "блок найден: вердикт, давность, сколько сетей с обходом — одной строкой" ;; *) no "блок найден" "warn|…обход есть у 9 сетей из 12, включён" "$R" ;; esac
         case "$R" in *'stale	warn|Прошлая проба оборвалась'*) ok "оборванный прогон: карточка говорит о повторе, а не «имён 0»" ;; *) no "оборванный прогон" "warn|Прошлая проба оборвалась…" "$R" ;; esac
-        case "$R" in *'blockedNoCfg	bad|'*'но обход в конфиг не попал'*) ok "блок есть, а в конфиге нет — расхождение красным" ;; *) no "расхождение" "bad|…не попал" "$R" ;; esac
+        case "$R" in *'blockedNoCfg	bad|'*'но в конфиг не попал'*) ok "блок есть, а в конфиге нет — расхождение красным" ;; *) no "расхождение" "bad|…не попал" "$R" ;; esac
         case "$R" in *'clean	good|Блока нет, проверено 2 дн назад'*) ok "блока нет: давность в днях, зелёным" ;; *) no "блока нет" "good|Блока нет…" "$R" ;; esac
         case "$R" in *'never	|Линия ещё не проверялась'*) ok "не мерили — так и написано" ;; *) no "не измерялась" "" "$R" ;; esac
         case "$R" in *'running	|проба идёт…'*) ok "идущая проба — «проба идёт…»" ;; *) no "проба идёт" "" "$R" ;; esac
