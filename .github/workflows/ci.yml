@@ -85,10 +85,18 @@ env:
   # результат, дело было в рантайме, а не в кодогенерации.
   GO_VERSION: "1.25.13"
 
+# РАННЕР ЗАКРЕПЛЁН НА ubuntu-24.04, не ubuntu-latest. 26.10.2026 ubuntu-latest
+# стал 26.04, где coreutils — uutils 0.10.0, и его mkdir НЕ атомарен: при двух
+# одновременных `mkdir L` оба получают успех (299 из 300 в контейнере, GNU —
+# 0 из 300). На mkdir держатся наши замки (_list_lock и другие), и тесты
+# одновременной записи стали падать через раз — на коде, который не менялся.
+# Роутеры живут на BusyBox, где mkdir — один атомарный системный вызов, то есть
+# 26.04 проверяет не то окружение, в котором код работает. Переходить на новый
+# образ — только вместе с проверкой атомарности ниже (шаг в джобе тестов).
 jobs:
   actionlint:
     name: Workflow lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -118,7 +126,7 @@ jobs:
 
   eslint:
     name: ESLint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Один линтер по одному большому файлу — минуты хватает с большим запасом.
     timeout-minutes: 10
     steps:
@@ -148,7 +156,7 @@ jobs:
 
   shellcheck:
     name: ShellCheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Только линтеры и проверки целостности — минуты хватает с запасом.
     # Тесты уехали в отдельный джоб: держать их здесь значило узнавать о
     # сломанном синтаксисе через двадцать минут.
@@ -405,7 +413,7 @@ jobs:
 
   tests:
     name: Shell tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Отдельный джоб, а не хвост линтеров. Раньше всё жило в одном: сломанный
     # синтаксис узнавался через двадцать минут вместе с тестами, а вышедший за
     # лимит джоб GitHub помечает CANCELLED — это неотличимо от ручной отмены,
@@ -420,6 +428,21 @@ jobs:
           # последних релизных коммита. При shallow-клоне их просто нет, и
           # проверка вырождается в skip, то есть в отсутствие защиты.
           fetch-depth: 0
+
+      - name: mkdir is atomic (lock primitive)
+        # Наши замки — `mkdir каталог`: кто создал, тот владеет. Если mkdir
+        # раннера не атомарен (uutils на ubuntu 26.04), тесты замков падают
+        # случайно и выглядят как дефект кода. Ловим это здесь, одной строкой.
+        run: |
+          cd "$RUNNER_TEMP"
+          both=0
+          for _ in $(seq 1 200); do
+            rm -rf L w
+            (mkdir L 2>/dev/null && echo x >> w) & (mkdir L 2>/dev/null && echo x >> w) & wait
+            [ "$(wc -l < w)" -ge 2 ] && both=$((both + 1))
+          done
+          echo "оба mkdir успешны: $both из 200"
+          [ "$both" = 0 ] || { echo "::error::mkdir раннера не атомарен ($(mkdir --version | head -1)) — замки z2k так не проверить"; exit 1; }
 
       - name: Install lua
         # test_tcp16_lua.sh гоняет lua-харнесс. Без lua набор молча
@@ -478,7 +501,7 @@ jobs:
 
   go:
     name: Go ${{ matrix.module }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       # Падение одного модуля не должно прятать вердикт по остальным: при
@@ -574,7 +597,7 @@ jobs:
 
   binaries:
     name: Отгружаемые бинарники собираются из этого исходника
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -687,7 +710,7 @@ jobs:
 
   lua-check:
     name: Luacheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -734,7 +757,7 @@ jobs:
 
   mutation:
     name: Mutation Testing
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
