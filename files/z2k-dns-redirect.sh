@@ -144,7 +144,7 @@ z2k_dns_service_running() {
 # Keenetic слушает 53-й порт и по TCP. Своего таймаута у nc нет, поэтому ждём
 # ответ сами и гасим nc по сроку.
 z2k_dns_resolver_answers() {
-    _hs=${1:-$Z2K_DNS_HC_SERVER}
+    _hs=$Z2K_DNS_HC_SERVER
     _hf="$Z2K_DNS_STATE_DIR/z2k-dns-hc.$$"
     _hr=$(awk 'BEGIN { srand(); printf "%06d", int(rand() * 1000000) }')
     # длина 41 = заголовок 12 + имя z2khcNNNNNN.example.com (25) + тип и класс 4;
