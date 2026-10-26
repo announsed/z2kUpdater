@@ -116,8 +116,8 @@ end)
 H.test('previously unprotected TCP fakes carry an invalid checksum',function()
     -- Номера после перенумерации 23.10.2026 (rkn 38 -> 46, yt/gv 18 -> 26),
     -- вставки трёх плеч yt/gv на 2–4 25.10.2026 (yt/gv 26 -> 29) и
-    -- перестановки по качеству 26.10.2026 (rkn 46 -> 44, yt 29 -> 25, gv 29 -> 20).
-    for key,num in pairs({rkn_tcp='44',yt_tcp='25',gv_tcp='20'}) do
+    -- перестановки по качеству 26.10.2026 (rkn 46 -> 44, yt 29 -> 24, gv 29 -> 19).
+    for key,num in pairs({rkn_tcp='44',yt_tcp='24',gv_tcp='19'}) do
         local checked=false
         for _,ins in ipairs(all[key]) do
             if ins.func=='fake' and ins.arg.strategy==num then
