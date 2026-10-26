@@ -8,7 +8,8 @@
 # подъёма демона. Проверяем таблицу на границах, стирание снятых плеч, слитый
 # ключ google_tls (каждая половина своей таблицей), quic, голосовой пул
 # (25.10: авто стирается, замороженное переносится),
-# запасной файл в tmpfs, снимок до переноса, идемпотентность и уважение к
+# автоматические записи пулов TCP и QUIC стираются (26.10: пулы переставлены),
+# замороженные переносятся; запасной файл в tmpfs, снимок до переноса, идемпотентность и уважение к
 # чужому замку.
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -33,32 +34,37 @@ check() { # check <desc> <key> <host> <expected strategy or ABSENT>
 }
 {
 printf '# z2k autocircular state (persisted circular nstrategy)\n# key\thost\tstrategy\tts\tmode\tsni\n'
-printf 'rkn_tcp\tkeep5.example|4\t5\t100\tauto\t\n'
-printf 'rkn_tcp\tkeep9.example|4\t9\t100\tauto\t\n'
+printf 'rkn_tcp\tkeep5.example|4\t5\t100\tfrozen\t\n'
+printf 'rkn_tcp\tkeep9.example|4\t9\t100\tfrozen\t\n'
 printf 'rkn_tcp\tgone10.example|4\t10\t100\tfrozen\tgone10.example\n'
-printf 'rkn_tcp\tshift11.example|4\t11\t100\tauto\t\n'
+printf 'rkn_tcp\tshift11.example|4\t11\t100\tfrozen\t\n'
 printf 'rkn_tcp\tshift13.example|4\t13\t100\tfrozen\tshift13.example\n'
-printf 'rkn_tcp\tshift24.example|4\t24\t100\tauto\t\n'
-printf 'rkn_tcp\tgone40.example|4\t40\t100\tauto\t\n'
-printf 'rkn_tcp\tshift44.example|4\t44\t100\tauto\t\n'
-printf 'rkn_tcp\tgone46.example|4\t46\t100\tauto\t\n'
-printf 'rkn_tcp\tshift47.example|4\t47\t100\tauto\t\n'
-printf 'rkn_tcp\tlast50.example|4\t50\t100\tauto\t\n'
-printf 'yt_tcp\tyt1.example|4\t1\t100\tauto\t\n'
-printf 'yt_tcp\tyt2.example|4\t2\t100\tauto\t\n'
-printf 'yt_tcp\tyt11.example|4\t11\t100\tauto\t\n'
-printf 'yt_tcp\tyt12.example|4\t12\t100\tauto\t\n'
+printf 'rkn_tcp\tshift24.example|4\t24\t100\tfrozen\t\n'
+printf 'rkn_tcp\tgone40.example|4\t40\t100\tfrozen\t\n'
+printf 'rkn_tcp\tshift44.example|4\t44\t100\tfrozen\t\n'
+printf 'rkn_tcp\tgone46.example|4\t46\t100\tfrozen\t\n'
+printf 'rkn_tcp\tshift47.example|4\t47\t100\tfrozen\t\n'
+printf 'rkn_tcp\tlast50.example|4\t50\t100\tfrozen\t\n'
+printf 'yt_tcp\tyt1.example|4\t1\t100\tfrozen\t\n'
+printf 'yt_tcp\tyt2.example|4\t2\t100\tfrozen\t\n'
+printf 'yt_tcp\tyt11.example|4\t11\t100\tfrozen\t\n'
+printf 'yt_tcp\tyt12.example|4\t12\t100\tfrozen\t\n'
 printf 'gv_tcp\tgv22.example|4\t22\t100\tfrozen\tgv22.example\n'
-printf 'google_tls\tmerged-yt22.example|4\t22\t100\tauto\t\n'
-printf 'google_tls\tmerged-gv1.example|4\t23\t100\tauto\t\n'
-printf 'google_tls\tmerged-gv22.example|4\t44\t100\tauto\t\n'
-printf 'quic\tquic.example|4\t7\t100\tauto\t\n'
+printf 'google_tls\tmerged-yt22.example|4\t22\t100\tfrozen\t\n'
+printf 'google_tls\tmerged-gv1.example|4\t23\t100\tfrozen\t\n'
+printf 'google_tls\tmerged-gv22.example|4\t44\t100\tfrozen\t\n'
+printf 'quic\tquic.example|4\t7\t100\tfrozen\t\n'
 printf 'discord_udp\tnohost\t4\t100\tauto\t\n'
+printf 'rkn_tcp\tauto-rkn_tcp.example|4\t5\t100\tauto\t\n'
+printf 'yt_tcp\tauto-yt_tcp.example|4\t2\t100\tauto\t\n'
+printf 'gv_tcp\tauto-gv_tcp.example|4\t22\t100\tauto\t\n'
+printf 'google_tls\tauto-google_tls.example|4\t23\t100\tauto\t\n'
+printf 'quic\tauto-quic.example|4\t7\t100\tauto\t\n'
 printf 'discord_udp\tvoice-frozen1\t1\t100\tfrozen\t\n'
 printf 'discord_udp\tvoice-frozen3\t3\t100\tfrozen\t\n'
 printf 'discord_udp\tvoice-frozen6\t6\t100\tfrozen\t\n'
 } > "$STATE"
-printf 'rkn_tcp\tfb.example|4\t24\t100\tauto\t\n' > "$Z2K_STATE_FALLBACK"
+printf 'rkn_tcp\tfb.example|4\t24\t100\tfrozen\t\n' > "$Z2K_STATE_FALLBACK"
 cp "$STATE" "$TMP/original"
 
 _z2k_migrate_pool_renumber_v1
@@ -84,6 +90,11 @@ check "google_tls gv part 23 (gv 1) -> 36"    google_tls 'merged-gv1.example|4' 
 check "google_tls gv part 44 (gv 22) -> 42"   google_tls 'merged-gv22.example|4' 42
 check "quic 7 -> 14"                          quic    'quic.example|4'    14
 check "discord auto row erased (new blob, start from 1)" discord_udp nohost ABSENT
+check "rkn_tcp auto row erased (pool reordered, start from 1)" rkn_tcp 'auto-rkn_tcp.example|4' ABSENT
+check "yt_tcp auto row erased (pool reordered, start from 1)" yt_tcp 'auto-yt_tcp.example|4' ABSENT
+check "gv_tcp auto row erased (pool reordered, start from 1)" gv_tcp 'auto-gv_tcp.example|4' ABSENT
+check "google_tls auto row erased (pool reordered, start from 1)" google_tls 'auto-google_tls.example|4' ABSENT
+check "quic auto row erased (pool reordered, start from 1)" quic 'auto-quic.example|4' ABSENT
 check "discord frozen 1 -> 2"                discord_udp voice-frozen1 2
 check "discord frozen 3 -> 1 (merged into new first)" discord_udp voice-frozen3 1
 check "discord frozen 6 stays 6"             discord_udp voice-frozen6 6
