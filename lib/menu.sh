@@ -57,8 +57,9 @@ show_main_menu() {
 |  Dkarloff - SEO отец, KIBERPANK, olmer2002,       |
 |  TiaMax, Denis, Mega Man, TheGreatYogo,           |
 |  logistik77, b11d11, BloodKnife39, SIGogelon,     |
-|  yozh, Altaec, DIDIQ Rawa, GregMSK, Кожевников    |
-|  bootnet, ewgen911, cmfifty, Ret80                |
+|  yozh, Altaec, DIDIQ Rawa, GregMSK, Кожевников,   |
+|  bootnet, ewgen911, cmfifty, Ret80,               |
+|  Шулепов Александр                                |
 +===================================================+
 
 MENU
