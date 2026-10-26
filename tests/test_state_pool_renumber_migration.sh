@@ -1,12 +1,13 @@
 #!/bin/sh
 # tests/test_state_pool_renumber_migration.sh
 #
-# 23.10.2026: rkn_tcp потерял плечи 10/40/45/46 и получил три новых на 12–14
-# (53), yt_tcp и gv_tcp получили восемь новых на 12–19, 25.10 ещё три на 2–4
-# (33). state.tsv хранит
-# НОМЕР плеча, поэтому init переносит номера по полной таблице до подъёма
-# демона. Проверяем таблицу на границах, стирание снятых плеч, слитый ключ
-# google_tls, голосовой пул (25.10: авто стирается, замороженное переносится),
+# 23.10.2026: rkn_tcp потерял плечи 10/40/45/46 и получил новые (55), yt_tcp и
+# gv_tcp получили одиннадцать новых (33), quic — девять (18); 26.10 все четыре
+# пула выстроены по качеству из замера, у yt и gv порядок разный. state.tsv
+# хранит НОМЕР плеча, поэтому init переносит номера по полной таблице до
+# подъёма демона. Проверяем таблицу на границах, стирание снятых плеч, слитый
+# ключ google_tls (каждая половина своей таблицей), quic, голосовой пул
+# (25.10: авто стирается, замороженное переносится),
 # запасной файл в tmpfs, снимок до переноса, идемпотентность и уважение к
 # чужому замку.
 set -eu
@@ -62,33 +63,33 @@ cp "$STATE" "$TMP/original"
 
 _z2k_migrate_pool_renumber_v1
 
-check "rkn 5 stays 5"                         rkn_tcp 'keep5.example|4'   5
-check "rkn 9 stays 9"                         rkn_tcp 'keep9.example|4'   9
+check "rkn 5 -> 20"                           rkn_tcp 'keep5.example|4'   20
+check "rkn 9 -> 26"                           rkn_tcp 'keep9.example|4'   26
 check "rkn 10 (removed) row erased"           rkn_tcp 'gone10.example|4'  ABSENT
-check "rkn 11 -> 10"                          rkn_tcp 'shift11.example|4' 10
-check "rkn 13 -> 21 (nine inserted)"          rkn_tcp 'shift13.example|4' 21
-check "rkn 24 -> 32"                          rkn_tcp 'shift24.example|4' 32
+check "rkn 11 -> 22"                          rkn_tcp 'shift11.example|4' 22
+check "rkn 13 -> 29"                          rkn_tcp 'shift13.example|4' 29
+check "rkn 24 -> 27"                          rkn_tcp 'shift24.example|4' 27
 check "rkn 40 (removed) row erased"           rkn_tcp 'gone40.example|4'  ABSENT
-check "rkn 44 -> 51"                          rkn_tcp 'shift44.example|4' 51
+check "rkn 44 -> 40"                          rkn_tcp 'shift44.example|4' 40
 check "rkn 46 (removed) row erased"           rkn_tcp 'gone46.example|4'  ABSENT
-check "rkn 47 -> 52"                          rkn_tcp 'shift47.example|4' 52
+check "rkn 47 -> 42"                          rkn_tcp 'shift47.example|4' 42
 check "rkn 50 -> 55"                          rkn_tcp 'last50.example|4'  55
 check "yt 1 stays 1"                          yt_tcp  'yt1.example|4'     1
-check "yt 2 -> 5 (three inserted at 2-4)"     yt_tcp  'yt2.example|4'     5
-check "yt 11 -> 14"                           yt_tcp  'yt11.example|4'    14
-check "yt 12 -> 23 (eight + three inserted)"  yt_tcp  'yt12.example|4'    23
-check "gv 22 -> 33"                           gv_tcp  'gv22.example|4'    33
-check "google_tls yt part 22 -> 33"           google_tls 'merged-yt22.example|4' 33
-check "google_tls gv part 23 (gv 1) -> 34"    google_tls 'merged-gv1.example|4'  34
-check "google_tls gv part 44 (gv 22) -> 66"   google_tls 'merged-gv22.example|4' 66
-check "quic row untouched"                    quic    'quic.example|4'    7
+check "yt 2 -> 17"                            yt_tcp  'yt2.example|4'     17
+check "yt 11 -> 2"                            yt_tcp  'yt11.example|4'    2
+check "yt 12 -> 15"                           yt_tcp  'yt12.example|4'    15
+check "gv 22 -> 10 (own table, not yt's)"     gv_tcp  'gv22.example|4'    10
+check "google_tls yt part 22 -> 4"            google_tls 'merged-yt22.example|4' 4
+check "google_tls gv part 23 (gv 1) -> 37"    google_tls 'merged-gv1.example|4'  37
+check "google_tls gv part 44 (gv 22) -> 43"   google_tls 'merged-gv22.example|4' 43
+check "quic 7 -> 14"                          quic    'quic.example|4'    14
 check "discord auto row erased (new blob, start from 1)" discord_udp nohost ABSENT
 check "discord frozen 1 -> 2"                discord_udp voice-frozen1 2
 check "discord frozen 3 -> 1 (merged into new first)" discord_udp voice-frozen3 1
 check "discord frozen 6 stays 6"             discord_udp voice-frozen6 6
 if awk -F'\t' '$2=="shift13.example|4" && $5=="frozen" && $6=="shift13.example" {f=1} END{exit !f}' "$STATE"; then ok "frozen mode and sni preserved"; else no "frozen mode and sni preserved"; fi
 if [ "$(head -2 "$STATE" | grep -c '^#')" = 2 ]; then ok "header comments kept"; else no "header comments kept"; fi
-if awk -F'\t' '$2=="fb.example|4" && $3==32 {f=1} END{exit !f}' "$Z2K_STATE_FALLBACK"; then ok "fallback file in tmpfs migrated too"; else no "fallback file in tmpfs migrated too"; fi
+if awk -F'\t' '$2=="fb.example|4" && $3==27 {f=1} END{exit !f}' "$Z2K_STATE_FALLBACK"; then ok "fallback file in tmpfs migrated too"; else no "fallback file in tmpfs migrated too"; fi
 if cmp -s "$TMP/original" "$STATE.pre-renumber-v1"; then ok "pre-migration snapshot kept"; else no "pre-migration snapshot kept"; fi
 if [ -f "$ZAPRET_BASE/state/pool-renumber-v1.done" ]; then ok "done marker written"; else no "done marker written"; fi
 if [ ! -e "$STATE.lock" ]; then ok "lock released"; else no "lock released"; fi
@@ -112,7 +113,7 @@ if [ -f "$STATE.lock" ]; then ok "foreign lock: lock left to its owner"; else no
 rm -f "$STATE.lock"
 _z2k_migrate_pool_renumber_v1
 if cmp -s "$TMP/once" "$STATE"; then ok "retry after lock release migrates"; else no "retry after lock release migrates"; fi
-if awk -F'\t' '$2=="fb.example|4" && $3==32 {f=1} END{exit !f}' "$Z2K_STATE_FALLBACK"; then ok "fallback not migrated twice"; else no "fallback not migrated twice"; fi
+if awk -F'\t' '$2=="fb.example|4" && $3==27 {f=1} END{exit !f}' "$Z2K_STATE_FALLBACK"; then ok "fallback not migrated twice"; else no "fallback not migrated twice"; fi
 if [ -f "$ZAPRET_BASE/state/pool-renumber-v1.done" ]; then ok "marker after full retry"; else no "marker after full retry"; fi
 
 # Таблицы в init обязаны соответствовать реальным пулам: максимум номера.
@@ -122,6 +123,8 @@ yt_max=$(grep 'key=yt_tcp' "$ROOT/strats_new2.txt" | grep -o ':strategy=[0-9]*' 
 [ "$yt_max" = 33 ] && ok "yt pool has 33 arms" || no "yt pool has 33 arms (got $yt_max)"
 gv_max=$(grep 'key=gv_tcp' "$ROOT/strats_new2.txt" | grep -o ':strategy=[0-9]*' | sed 's/.*=//' | sort -n | tail -1)
 [ "$gv_max" = 33 ] && ok "gv pool has 33 arms" || no "gv pool has 33 arms (got $gv_max)"
+quic_max=$(awk '/^\[quic_autocircular\]/{a=1;next} a && /^args=/{print;exit}' "$ROOT/quic_strats.ini" | grep -o ':strategy=[0-9]*' | sed 's/.*=//' | sort -n | tail -1)
+[ "$quic_max" = 18 ] && ok "quic pool has 18 arms" || no "quic pool has 18 arms (got $quic_max)"
 
 printf 'PASSED: %s\nFAILED: %s\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
