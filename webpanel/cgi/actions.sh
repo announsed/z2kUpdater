@@ -1371,6 +1371,7 @@ toggle_ppe() {
 }
 
 # UI describes the current action, never the saved start-up preference.
+# shellcheck disable=SC2120  # optional arg: GET /status in api.sh passes the running state it already computed
 fastroute_snapshot() {
     local d="${Z2K_NF_SYSCTL:-/proc/sys/net/netfilter}" value="" _run="${1:-}"
     fastroute=0
